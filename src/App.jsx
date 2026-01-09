@@ -63,56 +63,44 @@ export default function MRRenderStudio() {
       const data = await response.json();
       
       if (data.images?.[0]?.url) {
-        setResult(data.images[0].url);
+        // Convert to base64 immediately for cross-browser support
+        const imgResponse = await fetch(data.images[0].url);
+        const blob = await imgResponse.blob();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setResult(e.target.result);
+          setLoading(false);
+        };
+        reader.onerror = () => {
+          setError('Failed to load generated image');
+          setLoading(false);
+        };
+        reader.readAsDataURL(blob);
+        return; // Don't set loading false here, wait for reader
       } else {
         setError('No image returned from API');
       }
     } catch (err) {
       console.error('Generate error:', err);
       setError(err.message || 'Failed to generate image');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
-  const download = async () => {
+  const download = () => {
     if (!result) return;
-    
-    try {
-      // Fetch the image and convert to blob for download
-      const response = await fetch(result);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `mr-render-${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      // Fallback: open in new tab
-      window.open(result, '_blank');
-    }
+    const link = document.createElement('a');
+    link.href = result;
+    link.download = `mr-render-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const useAsInput = async () => {
+  const useAsInput = () => {
     if (!result) return;
-    
-    try {
-      const response = await fetch(result);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setImages([{ id: Date.now(), data: ev.target.result }]);
-        setResult(null);
-      };
-      reader.readAsDataURL(blob);
-    } catch (err) {
-      setError('Could not load result as input. Try downloading and re-uploading.');
-    }
+    setImages([{ id: Date.now(), data: result }]);
+    setResult(null);
   };
 
   const contextPrompts = {
