@@ -49,9 +49,16 @@ export default function MRRenderStudio() {
     });
   };
 
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
   const addImage = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 20MB.`);
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const compressed = await compressImage(ev.target.result);
