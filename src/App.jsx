@@ -10,6 +10,21 @@ export default function MRRenderStudio() {
   const [customPresets, setCustomPresets] = useState([]);
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const getErrorMessage = (status, fallback) => {
+    const errors = {
+      413: 'Image too large for server. Try using a smaller image or reduce the number of reference images.',
+      429: 'Too many requests. Wait a minute and try again.',
+      500: 'Server error. This is usually temporary — wait 30 seconds and retry.',
+      502: 'Server is temporarily unavailable. Try again in a minute.',
+      503: 'Service is overloaded or under maintenance. Try again shortly.',
+      504: 'Request timed out. Try with fewer images or a simpler prompt.',
+      401: 'Authentication error. Contact the admin — the API key may need updating.',
+      400: 'Bad request. Check that your prompt is not empty and your image uploaded correctly.',
+    };
+    return errors[status] || fallback || `Unexpected error (${status}). Try again or clear all and start fresh.`;
+  };
 
   // Load history and custom presets from localStorage
   useEffect(() => {
@@ -99,7 +114,7 @@ export default function MRRenderStudio() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || `API error: ${response.status}`);
+        throw new Error(getErrorMessage(response.status, errData.message));
       }
 
       const data = await response.json();
@@ -428,15 +443,57 @@ export default function MRRenderStudio() {
               </button>
             </div>
 
-            {/* INSTRUCTIONS */}
+            {/* INSTRUCTIONS & HELP */}
             <div className="bg-zinc-900/50 rounded-xl p-4 text-sm text-zinc-500">
               <h3 className="font-medium text-zinc-400 mb-2">Workflow</h3>
               <ol className="space-y-1 list-decimal list-inside text-xs">
-                <li>Upload your 3D render</li>
+                <li>Upload your 3D render (JPG/PNG, max 20MB)</li>
                 <li>Pick a context preset or write your own</li>
                 <li>Add material &amp; adjustments as needed</li>
                 <li>Generate &rarr; iterate with &quot;Use as Input&quot;</li>
               </ol>
+
+              <button
+                onClick={() => setShowHelp(!showHelp)}
+                className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2"
+              >
+                {showHelp ? 'Hide' : 'Show'} Troubleshooting &amp; Best Practices
+              </button>
+
+              {showHelp && (
+                <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
+                  <div>
+                    <h4 className="font-medium text-zinc-400 text-xs mb-1">Best Practices</h4>
+                    <ul className="space-y-0.5 text-xs list-disc list-inside">
+                      <li>Use images under 5MB for fastest results</li>
+                      <li>JPG/PNG work best &mdash; avoid RAW or TIFF files</li>
+                      <li>1-2 reference images is ideal; more = slower</li>
+                      <li>Be specific in prompts &mdash; describe lighting, camera angle, materials</li>
+                      <li>Use &quot;Use as Input&quot; to refine results iteratively</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-zinc-400 text-xs mb-1">Common Errors</h4>
+                    <ul className="space-y-1 text-xs">
+                      <li><span className="text-red-400 font-mono">413</span> &mdash; Image too large. Use a smaller file or fewer images. Images are auto-compressed but very large files can still exceed limits.</li>
+                      <li><span className="text-red-400 font-mono">429</span> &mdash; Rate limited. Too many requests in a short time. Wait 1 minute and retry.</li>
+                      <li><span className="text-red-400 font-mono">500/502/503</span> &mdash; Server issue. Usually temporary. Wait 30 seconds and try again.</li>
+                      <li><span className="text-red-400 font-mono">504</span> &mdash; Timeout. Try with fewer images or a shorter prompt.</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium text-zinc-400 text-xs mb-1">Quick Fixes</h4>
+                    <ul className="space-y-0.5 text-xs list-disc list-inside">
+                      <li>If nothing works, click &quot;Clear All&quot; and start fresh</li>
+                      <li>Try a different browser if uploads fail repeatedly</li>
+                      <li>Slow connection? Wait for the image thumbnail to appear before generating</li>
+                      <li>History images expired? They are hosted temporarily &mdash; download important results</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* GALLERY / HISTORY */}
