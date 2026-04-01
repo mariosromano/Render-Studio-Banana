@@ -33,12 +33,29 @@ export default function MRRenderStudio() {
     try { localStorage.setItem('mr-custom-presets', JSON.stringify(newPresets)); } catch {}
   };
 
+  const compressImage = (dataUrl, maxWidth = 1024) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = (h * maxWidth) / w; w = maxWidth; }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = dataUrl;
+    });
+  };
+
   const addImage = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImages(prev => [...prev, { id: Date.now(), data: ev.target.result }]);
+    reader.onload = async (ev) => {
+      const compressed = await compressImage(ev.target.result);
+      setImages(prev => [...prev, { id: Date.now(), data: compressed }]);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -129,8 +146,9 @@ export default function MRRenderStudio() {
       const response = await fetch(result);
       const blob = await response.blob();
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        setImages([{ id: Date.now(), data: ev.target.result }]);
+      reader.onload = async (ev) => {
+        const compressed = await compressImage(ev.target.result);
+        setImages([{ id: Date.now(), data: compressed }]);
         setResult(null);
       };
       reader.readAsDataURL(blob);
