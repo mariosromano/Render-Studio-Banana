@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function MRRenderStudio() {
   const [images, setImages] = useState([]);
@@ -11,6 +11,8 @@ export default function MRRenderStudio() {
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   const getErrorMessage = (status, fallback) => {
     const errors = {
@@ -66,21 +68,62 @@ export default function MRRenderStudio() {
 
   const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
-  const addImage = (e) => {
-    const file = e.target.files?.[0];
+  const processFile = (file) => {
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) {
-      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 20MB.`);
-      e.target.value = '';
+    if (!file.type.startsWith('image/')) {
+      setError('Only image files are supported (JPG, PNG, etc.).');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const compressed = await compressImage(ev.target.result);
-      setImages(prev => [...prev, { id: Date.now(), data: compressed }]);
-    };
-    reader.readAsDataURL(file);
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 20MB.`);
+      return;
+    }
+    setImages(prev => {
+      if (prev.length >= 5) return prev;
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const compressed = await compressImage(ev.target.result);
+        setImages(p => p.length < 5 ? [...p, { id: Date.now() + Math.random(), data: compressed }] : p);
+      };
+      reader.readAsDataURL(file);
+      return prev;
+    });
+  };
+
+  const addImage = (e) => {
+    const file = e.target.files?.[0];
+    processFile(file);
     e.target.value = '';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (images.length < 5) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setIsDragging(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    if (images.length >= 5) return;
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    const slots = 5 - images.length;
+    files.slice(0, slots).forEach(processFile);
   };
 
   const deleteImage = (id) => {
@@ -257,13 +300,33 @@ export default function MRRenderStudio() {
               </div>
 
               {images.length === 0 ? (
-                <label className="block border-2 border-dashed border-zinc-700 rounded-xl p-10 text-center cursor-pointer hover:border-zinc-500 transition-colors">
-                  <div className="text-3xl mb-2">&#128444;</div>
-                  <div className="text-zinc-500 text-sm">Click to upload render</div>
+                <label
+                  className={`block border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
+                    isDragging
+                      ? 'border-blue-400 bg-blue-900/20'
+                      : 'border-zinc-700 hover:border-zinc-500'
+                  }`}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                >
+                  <div className="text-3xl mb-2">{isDragging ? '📂' : '🖼'}</div>
+                  <div className="text-zinc-500 text-sm">
+                    {isDragging ? 'Drop to add image' : 'Click or drag & drop to upload'}
+                  </div>
                   <input type="file" accept="image/*" onChange={addImage} className="hidden" />
                 </label>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div
+                  className={`grid grid-cols-2 gap-2 rounded-xl transition-colors ${
+                    isDragging && images.length < 5 ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-900' : ''
+                  }`}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                >
                   {images.map((img) => (
                     <div key={img.id} className="relative">
                       <img src={img.data} className="w-full aspect-video object-cover rounded-lg" />
@@ -273,6 +336,11 @@ export default function MRRenderStudio() {
                       >&times;</button>
                     </div>
                   ))}
+                  {images.length < 5 && isDragging && (
+                    <div className="border-2 border-dashed border-blue-400 rounded-lg aspect-video flex items-center justify-center text-blue-400 text-sm">
+                      Drop here
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -447,7 +515,7 @@ export default function MRRenderStudio() {
             <div className="bg-zinc-900/50 rounded-xl p-4 text-sm text-zinc-500">
               <h3 className="font-medium text-zinc-400 mb-2">Workflow</h3>
               <ol className="space-y-1 list-decimal list-inside text-xs">
-                <li>Upload your 3D render (JPG/PNG, max 20MB)</li>
+                <li>Upload your 3D render — click or drag &amp; drop (JPG/PNG, max 20MB)</li>
                 <li>Pick a context preset or write your own</li>
                 <li>Add material &amp; adjustments as needed</li>
                 <li>Generate &rarr; iterate with &quot;Use as Input&quot;</li>
