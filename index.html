@@ -1,13 +1,976 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>render-studio-banana</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MR Walls Command Map</title>
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <style>
+    :root {
+      --bg: #08080f;
+      --surface: rgba(255,255,255,0.06);
+      --surface-hover: rgba(255,255,255,0.10);
+      --border: rgba(255,255,255,0.10);
+      --text: #f1f5f9;
+      --text-dim: #64748b;
+      --accent: #6366f1;
+      --radius: 14px;
+      --blur: blur(16px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      height: 56px;
+      background: rgba(15,15,25,0.95);
+      backdrop-filter: var(--blur);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-label {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .logo {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-right: 16px;
+    }
+
+    select, input[type="text"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    select:hover, input[type="text"]:hover {
+      background: var(--surface-hover);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    select:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--surface-hover);
+    }
+
+    button {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    button:hover {
+      background: #5558e3;
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    #cy {
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 56px);
+      background: linear-gradient(135deg, #08080f 0%, #0f0f1f 100%);
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .drawer {
+      position: fixed;
+      right: -400px;
+      top: 0;
+      width: 400px;
+      height: 100vh;
+      background: rgba(15,15,25,0.98);
+      backdrop-filter: var(--blur);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      z-index: 1000;
+      transition: right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      padding: 20px;
+    }
+
+    .drawer.open {
+      right: 0;
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .drawer-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .drawer-close {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      cursor: pointer;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .drawer-close:hover {
+      background: var(--surface-hover);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .drawer-section {
+      margin-bottom: 20px;
+    }
+
+    .drawer-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 6px;
+      margin-bottom: 8px;
+    }
+
+    .badge.status-done {
+      background: rgba(74, 222, 128, 0.2);
+      color: #4ade80;
+      border: 1px solid rgba(74, 222, 128, 0.3);
+    }
+
+    .badge.status-in-progress {
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .badge.status-blocked {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ff6b6b;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .badge.status-next {
+      background: rgba(251, 146, 60, 0.2);
+      color: #fb923c;
+      border: 1px solid rgba(251, 146, 60, 0.3);
+    }
+
+    .badge.status-future {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .badge.priority-critical {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ff6b6b;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .badge.priority-high {
+      background: rgba(251, 146, 60, 0.2);
+      color: #fb923c;
+      border: 1px solid rgba(251, 146, 60, 0.3);
+    }
+
+    .badge.priority-medium {
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .description {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .details-table {
+      width: 100%;
+      font-size: 12px;
+      border-collapse: collapse;
+    }
+
+    .details-table tr {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .details-table td {
+      padding: 10px 0;
+      vertical-align: top;
+    }
+
+    .details-table td:first-child {
+      color: var(--text-dim);
+      font-weight: 600;
+      width: 100px;
+      padding-right: 10px;
+    }
+
+    .next-action {
+      background: rgba(99, 102, 241, 0.1);
+      border-left: 3px solid var(--accent);
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .next-action-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* Cytoscape node styling */
+    .node {
+      cursor: pointer;
+    }
+
+    .node:hover {
+      opacity: 0.9;
+    }
+
+    .edge {
+      opacity: 0.4;
+      transition: opacity 0.2s ease;
+    }
+
+    .edge.highlighted {
+      opacity: 0.8;
+    }
+
+    /* Scrollbar styling */
+    .drawer::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .drawer::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .drawer::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+
+    .drawer::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    @media (max-width: 1024px) {
+      #toolbar {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 56px;
+        padding: 8px 12px;
+      }
+
+      .toolbar-group {
+        font-size: 11px;
+      }
+
+      select, input[type="text"], button {
+        font-size: 11px;
+        padding: 5px 8px;
+      }
+
+      .drawer {
+        width: 350px;
+        right: -350px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="toolbar">
+      <div class="logo">MR Walls Command Map</div>
+      
+      <div class="toolbar-group">
+        <label class="toolbar-label">Layout</label>
+        <select id="layoutSelect">
+          <option value="radial">Radial</option>
+          <option value="tree">Tree Branch</option>
+          <option value="columns">Pillar Columns</option>
+          <option value="workflow">Agent Workflow</option>
+          <option value="force">Force Graph</option>
+        </select>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group">
+        <input type="text" id="searchInput" placeholder="Search nodes..." style="width: 150px;">
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Pillar</label>
+        <select id="filterPillar">
+          <option value="">All</option>
+          <option value="p-agents">Agents</option>
+          <option value="p-workflows">Workflows</option>
+          <option value="p-automations">Automations</option>
+          <option value="p-systems">Systems</option>
+          <option value="p-knowledge">Knowledge</option>
+          <option value="p-roadmap">Roadmap</option>
+          <option value="p-data">Data</option>
+          <option value="p-samantha">Samantha</option>
+          <option value="p-predictions">Predictions</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Status</label>
+        <select id="filterStatus">
+          <option value="">All</option>
+          <option value="done">Done</option>
+          <option value="in-progress">In Progress</option>
+          <option value="next">Next</option>
+          <option value="future">Future</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Priority</label>
+        <select id="filterPriority">
+          <option value="">All</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+        </select>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <button id="exportJson">Export JSON</button>
+      <button id="exportMarkdown">Export MD</button>
+    </div>
+
+    <div class="main-content">
+      <div id="cy"></div>
+      <div class="drawer" id="drawer">
+        <div class="drawer-header">
+          <div class="drawer-title" id="drawerTitle">Select a node</div>
+          <button class="drawer-close" id="drawerClose">✕</button>
+        </div>
+        <div id="drawerContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let cy = null;
+    let currentData = null;
+    let allNodes = [];
+    let allEdges = [];
+
+    // Initialize Cytoscape
+    async function initCytoscape() {
+      // Load data
+      const response = await fetch('./data/command-map.json');
+      currentData = await response.json();
+      allNodes = currentData.nodes;
+      allEdges = currentData.edges;
+
+      const cytoData = allNodes.map(n => ({ data: n }))
+        .concat(allEdges.map(e => ({ data: e })));
+
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: cytoData,
+        style: getCytoscapeStyle(),
+        layout: { name: 'radial', directed: true },
+        wheelSensitivity: 0.1,
+        pixelRatio: 'auto'
+      });
+
+      // Click handlers
+      cy.on('tap', 'node', (evt) => {
+        const node = evt.target;
+        openDrawer(node.data());
+        highlightConnected(node);
+      });
+
+      cy.on('tap', (evt) => {
+        if (evt.target === cy) {
+          closeDrawer();
+          cy.elements().removeClass('highlighted');
+        }
+      });
+
+      // Apply initial layout
+      applyLayout('radial');
+    }
+
+    function getCytoscapeStyle() {
+      return [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#1e293b',
+            'border-color': '#64748b',
+            'border-width': 1,
+            'color': '#f1f5f9',
+            'label': 'data(label)',
+            'font-size': 11,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': 70,
+            'text-margin-y': -3,
+            'overlay-padding': 5,
+            'opacity': 0.9
+          }
+        },
+        {
+          selector: 'node[type="root"]',
+          style: {
+            'width': 120,
+            'height': 120,
+            'shape': 'ellipse',
+            'background-color': '#1f2937',
+            'border-color': '#f1f5f9',
+            'border-width': 2,
+            'font-size': 13,
+            'font-weight': 'bold'
+          }
+        },
+        {
+          selector: 'node[type="pillar"]',
+          style: {
+            'width': 100,
+            'height': 60,
+            'shape': 'roundrectangle',
+            'background-color': '#1e3a8a',
+            'border-color': '#3b82f6',
+            'border-width': 2,
+            'font-size': 12,
+            'font-weight': 'bold'
+          }
+        },
+        {
+          selector: 'node[type="agent"]',
+          style: {
+            'width': 80,
+            'height': 80,
+            'shape': 'ellipse',
+            'background-color': '#1e1b4b',
+            'border-color': '#818cf8',
+            'border-width': 2,
+            'color': '#e0e7ff',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="workflow"]',
+          style: {
+            'width': 90,
+            'height': 60,
+            'shape': 'roundrectangle',
+            'background-color': '#082f49',
+            'border-color': '#38bdf8',
+            'border-width': 2,
+            'color': '#cffafe',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="automation"]',
+          style: {
+            'width': 85,
+            'height': 85,
+            'shape': 'diamond',
+            'background-color': '#431407',
+            'border-color': '#fb923c',
+            'border-width': 2,
+            'color': '#fed7aa',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="system"]',
+          style: {
+            'width': 85,
+            'height': 55,
+            'shape': 'rectangle',
+            'background-color': '#14532d',
+            'border-color': '#4ade80',
+            'border-width': 2,
+            'color': '#dcfce7',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="knowledge"]',
+          style: {
+            'width': 80,
+            'height': 55,
+            'shape': 'ellipse',
+            'background-color': '#713f12',
+            'border-color': '#fbbf24',
+            'border-width': 2,
+            'color': '#fef3c7',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="roadmap"]',
+          style: {
+            'width': 90,
+            'height': 85,
+            'shape': 'pentagon',
+            'background-color': '#581c87',
+            'border-color': '#e879f9',
+            'border-width': 2,
+            'color': '#f3e8ff',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="data"]',
+          style: {
+            'width': 85,
+            'height': 55,
+            'shape': 'rectangle',
+            'background-color': '#0e3438',
+            'border-color': '#67e8f9',
+            'border-width': 2,
+            'color': '#cffafe',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="workstream"]',
+          style: {
+            'width': 90,
+            'height': 60,
+            'shape': 'roundrectangle',
+            'background-color': '#831843',
+            'border-color': '#f472b6',
+            'border-width': 2,
+            'color': '#fce7f3',
+            'font-size': 10
+          }
+        },
+        {
+          selector: 'node[type="prediction"]',
+          style: {
+            'width': 85,
+            'height': 60,
+            'shape': 'ellipse',
+            'background-color': '#022c22',
+            'border-color': '#34d399',
+            'border-width': 2.5,
+            'color': '#d1fae5',
+            'font-size': 10,
+            'shadow-blur': 20,
+            'shadow-color': '#34d399',
+            'shadow-opacity': 0.8,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[status="in-progress"]',
+          style: {
+            'border-width': 3,
+            'border-color': (ele) => {
+              const type = ele.data('type');
+              const baseColor = getTypeColor(type).border;
+              return baseColor;
+            }
+          }
+        },
+        {
+          selector: 'node[status="blocked"]',
+          style: {
+            'border-color': '#ef4444',
+            'border-width': 3,
+            'border-style': 'dashed'
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 1.5,
+            'line-color': 'rgba(255,255,255,0.2)',
+            'target-arrow-color': 'rgba(255,255,255,0.2)',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'opacity': 0.35
+          }
+        },
+        {
+          selector: 'edge.highlighted',
+          style: {
+            'line-color': '#6366f1',
+            'target-arrow-color': '#6366f1',
+            'opacity': 0.8,
+            'width': 2.5,
+            'z-index': 10
+          }
+        },
+        {
+          selector: 'node.highlighted',
+          style: {
+            'z-index': 10,
+            'opacity': 1
+          }
+        },
+        {
+          selector: 'node.hidden',
+          style: {
+            'display': 'none'
+          }
+        },
+        {
+          selector: 'edge.hidden',
+          style: {
+            'display': 'none'
+          }
+        }
+      ];
+    }
+
+    function getTypeColor(type) {
+      const colors = {
+        root: { bg: '#1f2937', border: '#f1f5f9' },
+        pillar: { bg: '#1e3a8a', border: '#3b82f6' },
+        agent: { bg: '#1e1b4b', border: '#818cf8' },
+        workflow: { bg: '#082f49', border: '#38bdf8' },
+        automation: { bg: '#431407', border: '#fb923c' },
+        system: { bg: '#14532d', border: '#4ade80' },
+        knowledge: { bg: '#713f12', border: '#fbbf24' },
+        roadmap: { bg: '#581c87', border: '#e879f9' },
+        data: { bg: '#0e3438', border: '#67e8f9' },
+        workstream: { bg: '#831843', border: '#f472b6' },
+        prediction: { bg: '#022c22', border: '#34d399' }
+      };
+      return colors[type] || colors.root;
+    }
+
+    function applyLayout(name) {
+      let options = { directed: true, animate: true, animationDuration: 500 };
+
+      switch(name) {
+        case 'radial':
+          cy.layout({ name: 'concentric', directed: true, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'tree':
+          cy.layout({ name: 'dagre', rankDir: 'TB', nodeSep: 60, rankSep: 80, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'columns':
+          cy.layout({ name: 'breadthfirst', directed: true, grid: true, spacingFactor: 1.4, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'workflow':
+          cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'force':
+          cy.layout({ name: 'cose', animate: true, nodeRepulsion: 8000, idealEdgeLength: 120, animationDuration: 500 }).run();
+          break;
+      }
+    }
+
+    function highlightConnected(node) {
+      cy.elements().removeClass('highlighted');
+      node.addClass('highlighted');
+      node.connectedEdges().addClass('highlighted');
+      node.connectedEdges().target().addClass('highlighted');
+      node.connectedEdges().source().addClass('highlighted');
+    }
+
+    function openDrawer(nodeData) {
+      const drawer = document.getElementById('drawer');
+      const title = document.getElementById('drawerTitle');
+      const content = document.getElementById('drawerContent');
+
+      title.textContent = nodeData.label;
+
+      let html = '<div class="drawer-section">';
+      
+      if (nodeData.status) {
+        html += `<div class="badge status-${nodeData.status}">${nodeData.status}</div>`;
+      }
+      if (nodeData.priority) {
+        html += `<div class="badge priority-${nodeData.priority}">${nodeData.priority}</div>`;
+      }
+
+      html += '</div>';
+
+      if (nodeData.description) {
+        html += `<div class="drawer-section"><div class="description">${escapeHtml(nodeData.description)}</div></div>`;
+      }
+
+      if (nodeData.nextAction) {
+        html += `<div class="drawer-section"><div class="next-action"><div class="next-action-label">Next Action</div>${escapeHtml(nodeData.nextAction)}</div></div>`;
+      }
+
+      const detailsFields = [
+        { key: 'type', label: 'Type' },
+        { key: 'pillar', label: 'Pillar' },
+        { key: 'status', label: 'Status' },
+        { key: 'priority', label: 'Priority' },
+        { key: 'channel', label: 'Channel' },
+        { key: 'file', label: 'File' },
+        { key: 'owner', label: 'Owner' },
+        { key: 'notes', label: 'Notes' }
+      ];
+
+      let hasDetails = false;
+      let detailsHtml = '<table class="details-table">';
+
+      detailsFields.forEach(field => {
+        if (nodeData[field.key] && nodeData[field.key] !== nodeData.status && nodeData[field.key] !== nodeData.priority) {
+          detailsHtml += `<tr><td>${field.label}</td><td>${escapeHtml(String(nodeData[field.key]))}</td></tr>`;
+          hasDetails = true;
+        }
+      });
+
+      detailsHtml += '</table>';
+
+      if (hasDetails) {
+        html += `<div class="drawer-section"><div class="drawer-section-title">Details</div>${detailsHtml}</div>`;
+      }
+
+      content.innerHTML = html;
+      drawer.classList.add('open');
+    }
+
+    function closeDrawer() {
+      const drawer = document.getElementById('drawer');
+      drawer.classList.remove('open');
+      cy.elements().removeClass('highlighted');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Event listeners
+    document.getElementById('layoutSelect').addEventListener('change', (e) => {
+      applyLayout(e.target.value);
+    });
+
+    document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      applyFilters(query, 
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterPillar').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterStatus').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterPriority').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    function applyFilters(searchQuery, pillarFilter, statusFilter, priorityFilter) {
+      cy.elements().removeClass('hidden');
+
+      cy.nodes().forEach(node => {
+        const data = node.data();
+        let hidden = false;
+
+        if (searchQuery && !data.label.toLowerCase().includes(searchQuery) && 
+            (!data.description || !data.description.toLowerCase().includes(searchQuery))) {
+          hidden = true;
+        }
+
+        if (pillarFilter && data.pillar !== pillarFilter) {
+          hidden = true;
+        }
+
+        if (statusFilter && data.status !== statusFilter) {
+          hidden = true;
+        }
+
+        if (priorityFilter && data.priority !== priorityFilter) {
+          hidden = true;
+        }
+
+        if (hidden) {
+          node.addClass('hidden');
+        }
+      });
+
+      cy.edges().forEach(edge => {
+        const source = cy.$id(edge.data('source'));
+        const target = cy.$id(edge.data('target'));
+        if (source.hasClass('hidden') || target.hasClass('hidden')) {
+          edge.addClass('hidden');
+        }
+      });
+    }
+
+    document.getElementById('exportJson').addEventListener('click', () => {
+      const dataStr = JSON.stringify(currentData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'command-map.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('exportMarkdown').addEventListener('click', () => {
+      let md = '# MR Walls Command Map\n\n';
+
+      const pillars = ['p-agents', 'p-workflows', 'p-automations', 'p-systems', 'p-knowledge', 'p-roadmap', 'p-data', 'p-samantha', 'p-predictions'];
+      const pillarNames = {
+        'p-agents': 'AI Agents',
+        'p-workflows': 'Workflows',
+        'p-automations': 'Automations',
+        'p-systems': 'Internal Systems',
+        'p-knowledge': 'Knowledge Base',
+        'p-roadmap': 'Project Roadmap',
+        'p-data': 'Data Infrastructure',
+        'p-samantha': 'Samantha\'s Workstream',
+        'p-predictions': 'Agentic Predictions'
+      };
+
+      pillars.forEach(pillar => {
+        const nodes = allNodes.filter(n => n.pillar === pillar);
+        if (nodes.length > 0) {
+          md += `## ${pillarNames[pillar]}\n\n`;
+          nodes.forEach(node => {
+            if (node.type !== 'pillar') {
+              md += `### ${node.label}\n`;
+              if (node.description) md += `${node.description}\n\n`;
+              if (node.status) md += `**Status:** ${node.status}\n`;
+              if (node.priority) md += `**Priority:** ${node.priority}\n`;
+              if (node.nextAction) md += `**Next Action:** ${node.nextAction}\n`;
+              md += '\n';
+            }
+          });
+        }
+      });
+
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'command-map.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Initialize on load
+    window.addEventListener('load', initCytoscape);
+  </script>
+</body>
 </html>
