@@ -1,0 +1,5 @@
+{
+  "version": 2,
+  "builds": [{"src": "command-map/index.html", "use": "@vercel/static"}],
+  "routes": [{"src": "/(.*)", "dest": "/command-map/index.html"}]
+}
