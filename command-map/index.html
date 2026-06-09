@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MR Walls Command Map</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <style>
+    :root {
+      --bg: #020408;
+      --surface: rgba(0,255,240,0.04);
+      --surface-hover: rgba(0,255,240,0.08);
+      --border: rgba(0,255,240,0.12);
+      --text: #e2f0ff;
+      --text-dim: #4a6fa5;
+      --accent: #00fff0;
+      --accent2: #7b2fff;
+      --glow: 0 0 20px rgba(0,255,240,0.3);
+      --radius: 14px;
+      --blur: blur(16px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      height: 56px;
+      background: rgba(2,4,8,0.97);
+      backdrop-filter: var(--blur);
+      border-bottom: 1px solid rgba(0,255,240,0.15);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-label {
+      font-size: 12px;
+      color: var(--accent);
+      opacity: 0.6;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .logo {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(0,255,240,0.8);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-right: 16px;
+    }
+
+    select, input[type="text"] {
+      background: var(--surface);
+      border: 1px solid rgba(0,255,240,0.2);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    select:hover, input[type="text"]:hover {
+      background: var(--surface-hover);
+      border-color: rgba(0,255,240,0.3);
+    }
+
+    select:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--surface-hover);
+      box-shadow: 0 0 8px rgba(0,255,240,0.15);
+    }
+
+    select option {
+      background: #1a1a2e;
+      color: #e2e8f0;
+    }
+
+    button {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    button:hover {
+      background: rgba(0,255,240,0.1);
+      box-shadow: 0 0 12px rgba(0,255,240,0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    #cy {
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 56px);
+      background: #020408;
+      background-image: linear-gradient(rgba(0,255,240,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,240,0.025) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .drawer {
+      position: fixed;
+      right: -400px;
+      top: 0;
+      width: 400px;
+      height: 100vh;
+      background: rgba(2,4,8,0.98);
+      backdrop-filter: var(--blur);
+      border-left: 1px solid rgba(0,255,240,0.15);
+      overflow-y: auto;
+      z-index: 1000;
+      transition: right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      padding: 20px;
+    }
+
+    .drawer.open {
+      right: 0;
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .drawer-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(0,255,240,0.5);
+    }
+
+    .drawer-close {
+      background: transparent;
+      border: 1px solid rgba(0,255,240,0.2);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      cursor: pointer;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .drawer-close:hover {
+      background: var(--surface-hover);
+      border-color: var(--accent);
+    }
+
+    .drawer-section {
+      margin-bottom: 20px;
+    }
+
+    .drawer-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      opacity: 0.7;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 6px;
+      margin-bottom: 8px;
+    }
+
+    .badge.status-done {
+      background: rgba(0,255,150,0.15);
+      color: #00ff96;
+      border: 1px solid rgba(0,255,150,0.3);
+    }
+
+    .badge.status-in-progress {
+      background: rgba(0,180,255,0.15);
+      color: #00d2ff;
+      border: 1px solid rgba(0,180,255,0.3);
+    }
+
+    .badge.status-blocked {
+      background: rgba(255,34,68,0.15);
+      color: #ff2244;
+      border: 1px solid rgba(255,34,68,0.3);
+    }
+
+    .badge.status-next {
+      background: rgba(255,140,0,0.15);
+      color: #ff8c00;
+      border: 1px solid rgba(255,140,0,0.3);
+    }
+
+    .badge.status-future {
+      background: rgba(200,50,255,0.15);
+      color: #c832ff;
+      border: 1px solid rgba(200,50,255,0.3);
+    }
+
+    .badge.priority-critical {
+      background: rgba(255,34,68,0.15);
+      color: #ff2244;
+      border: 1px solid rgba(255,34,68,0.3);
+    }
+
+    .badge.priority-high {
+      background: rgba(255,140,0,0.15);
+      color: #ff8c00;
+      border: 1px solid rgba(255,140,0,0.3);
+    }
+
+    .badge.priority-medium {
+      background: rgba(0,180,255,0.15);
+      color: #00d2ff;
+      border: 1px solid rgba(0,180,255,0.3);
+    }
+
+    .description {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }
+
+    .details-table {
+      width: 100%;
+      font-size: 12px;
+      border-collapse: collapse;
+    }
+
+    .details-table tr {
+      border-bottom: 1px solid rgba(0,255,240,0.08);
+    }
+
+    .details-table td {
+      padding: 10px 0;
+      vertical-align: top;
+    }
+
+    .details-table td:first-child {
+      color: var(--accent);
+      opacity: 0.6;
+      font-weight: 600;
+      width: 100px;
+      padding-right: 10px;
+    }
+
+    .next-action {
+      background: rgba(0,255,240,0.05);
+      border-left: 3px solid var(--accent);
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .next-action-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* Cytoscape node styling */
+    .node {
+      cursor: pointer;
+    }
+
+    .node:hover {
+      opacity: 0.9;
+    }
+
+    .edge {
+      opacity: 0.4;
+      transition: opacity 0.2s ease;
+    }
+
+    .edge.highlighted {
+      opacity: 0.8;
+    }
+
+    /* Scrollbar styling */
+    .drawer::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .drawer::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .drawer::-webkit-scrollbar-thumb {
+      background: rgba(0,255,240,0.15);
+      border-radius: 4px;
+    }
+
+    .drawer::-webkit-scrollbar-thumb:hover {
+      background: rgba(0,255,240,0.25);
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      margin: 0 4px;
+    }
+
+    /* ── Animations ─────────────────────────────── */
+    @keyframes scanline {
+      0%   { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
+    }
+    @keyframes glitch {
+      0%,90%,100% { text-shadow: 0 0 20px rgba(0,255,240,0.8); clip-path: none; transform: none; }
+      92%  { text-shadow: -2px 0 #ff003c, 2px 0 #00fff0; clip-path: inset(20% 0 60% 0); transform: translate(-2px,0); }
+      94%  { text-shadow: 2px 0 #ff003c, -2px 0 #00fff0; clip-path: inset(50% 0 20% 0); transform: translate(2px,0); }
+      96%  { text-shadow: 0 0 20px rgba(0,255,240,0.8); clip-path: none; transform: none; }
+      98%  { text-shadow: -1px 0 #ff003c, 1px 0 #00fff0; clip-path: inset(5% 0 85% 0); transform: translate(-1px,0); }
+    }
+    @keyframes hud-pulse {
+      0%,100% { opacity: 0.5; }
+      50%      { opacity: 1; }
+    }
+    @keyframes border-spin {
+      0%   { border-color: rgba(0,255,240,0.3); box-shadow: 0 0 8px rgba(0,255,240,0.1); }
+      50%  { border-color: rgba(0,255,240,0.7); box-shadow: 0 0 18px rgba(0,255,240,0.3); }
+      100% { border-color: rgba(0,255,240,0.3); box-shadow: 0 0 8px rgba(0,255,240,0.1); }
+    }
+    @keyframes status-blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.3; }
+    }
+
+    /* Scanline overlay */
+    #scanline-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(to bottom, transparent, rgba(0,255,240,0.04) 50%, transparent);
+      pointer-events: none;
+      z-index: 9999;
+      animation: scanline 6s linear infinite;
+    }
+
+    /* Vignette + noise on canvas */
+    #cy::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+    #cy { position: relative; }
+
+    /* Logo glitch */
+    .logo {
+      animation: glitch 8s ease-in-out infinite;
+      font-family: 'Orbitron', sans-serif !important;
+    }
+
+    /* HUD node count */
+    .hud-count {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: rgba(0,255,240,0.6);
+      border: 1px solid rgba(0,255,240,0.2);
+      padding: 4px 10px;
+      border-radius: 3px;
+      letter-spacing: 1px;
+      animation: border-spin 3s ease-in-out infinite;
+    }
+
+    /* Status bar */
+    #status-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 24px;
+      background: rgba(2,4,8,0.95);
+      border-top: 1px solid rgba(0,255,240,0.1);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 20px;
+      z-index: 500;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(0,255,240,0.4);
+    }
+    #status-bar .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #00ff96;
+      display: inline-block;
+      margin-right: 5px;
+      animation: status-blink 2s ease-in-out infinite;
+    }
+    #status-bar .status-item { display: flex; align-items: center; }
+
+    /* Legend */
+    #legend {
+      position: fixed;
+      bottom: 32px;
+      left: 16px;
+      background: rgba(2,4,8,0.92);
+      border: 1px solid rgba(0,255,240,0.15);
+      border-radius: 8px;
+      padding: 12px 14px;
+      z-index: 600;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(0,255,240,0.5);
+      min-width: 160px;
+      transition: opacity 0.3s;
+    }
+    #legend.collapsed .legend-items { display: none; }
+    #legend-title {
+      color: rgba(0,255,240,0.8);
+      letter-spacing: 1px;
+      font-size: 10px;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    #legend.collapsed #legend-title { margin-bottom: 0; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      color: rgba(200,220,255,0.7);
+    }
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border: 1.5px solid;
+      flex-shrink: 0;
+    }
+    .legend-swatch.ellipse { border-radius: 50%; }
+    .legend-swatch.diamond { transform: rotate(45deg); width: 10px; height: 10px; }
+    .legend-swatch.hex { clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); border: none; }
+    .legend-sep { border-top: 1px solid rgba(0,255,240,0.08); margin: 6px 0; }
+
+    /* HUD corner brackets on drawer */
+    .drawer::before,
+    .drawer::after {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .drawer::before {
+      top: 12px; left: 12px;
+      border-top: 1px solid rgba(0,255,240,0.6);
+      border-left: 1px solid rgba(0,255,240,0.6);
+    }
+    .drawer::after {
+      bottom: 12px; right: 12px;
+      border-bottom: 1px solid rgba(0,255,240,0.6);
+      border-right: 1px solid rgba(0,255,240,0.6);
+    }
+
+    /* Toolbar: Orbitron for labels */
+    .toolbar-label {
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    /* Make #cy height account for status bar */
+    #cy { height: calc(100vh - 56px - 24px) !important; }
+
+    /* Node hover tooltip hint */
+    .node-tooltip {
+      position: fixed;
+      background: rgba(2,4,8,0.92);
+      border: 1px solid rgba(0,255,240,0.25);
+      color: rgba(0,255,240,0.8);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      pointer-events: none;
+      z-index: 2000;
+      display: none;
+      letter-spacing: 0.5px;
+    }
+
+    @media (max-width: 1024px) {
+      #toolbar {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 56px;
+        padding: 8px 12px;
+      }
+
+      .toolbar-group {
+        font-size: 11px;
+      }
+
+      select, input[type="text"], button {
+        font-size: 11px;
+        padding: 5px 8px;
+      }
+
+      .drawer {
+        width: 350px;
+        right: -350px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="toolbar">
+      <div class="logo">⬡ MR WALLS COMMAND MAP</div>
+      <div class="hud-count" id="nodeCount">NODES: 0 / EDGES: 0</div>
+      
+      <div class="toolbar-group">
+        <label class="toolbar-label">Layout</label>
+        <select id="layoutSelect">
+          <option value="radial">Radial</option>
+          <option value="tree">Tree Branch</option>
+          <option value="columns">Pillar Columns</option>
+          <option value="workflow">Agent Workflow</option>
+          <option value="force">Force Graph</option>
+        </select>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <div class="toolbar-group">
+        <input type="text" id="searchInput" placeholder="Search nodes..." style="width: 150px;">
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Pillar</label>
+        <select id="filterPillar">
+          <option value="">All</option>
+          <option value="p-agents">Agents</option>
+          <option value="p-workflows">Workflows</option>
+          <option value="p-automations">Automations</option>
+          <option value="p-systems">Systems</option>
+          <option value="p-knowledge">Knowledge</option>
+          <option value="p-roadmap">Roadmap</option>
+          <option value="p-data">Data</option>
+          <option value="p-samantha">Samantha</option>
+          <option value="p-predictions">Predictions</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Status</label>
+        <select id="filterStatus">
+          <option value="">All</option>
+          <option value="done">Done</option>
+          <option value="in-progress">In Progress</option>
+          <option value="next">Next</option>
+          <option value="future">Future</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </div>
+
+      <div class="toolbar-group">
+        <label class="toolbar-label">Priority</label>
+        <select id="filterPriority">
+          <option value="">All</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+        </select>
+      </div>
+
+      <div class="toolbar-divider"></div>
+
+      <button id="exportJson">Export JSON</button>
+      <button id="exportMarkdown">Export MD</button>
+      <div class="toolbar-divider"></div>
+      <button id="toggleNextSteps" style="background:transparent;border:1px solid rgba(255,220,0,0.5);color:rgba(255,220,0,0.8);letter-spacing:1px" title="Toggle recommended next steps layer">💡 NEXT STEPS</button>
+    </div>
+
+    <div id="scanline-overlay"></div>
+    <div class="node-tooltip" id="nodeTooltip"></div>
+    <div class="main-content">
+      <div id="cy"></div>
+      <div class="drawer" id="drawer">
+        <div class="drawer-header">
+          <div class="drawer-title" id="drawerTitle">Select a node</div>
+          <button class="drawer-close" id="drawerClose">✕</button>
+        </div>
+        <div id="drawerContent"></div>
+      </div>
+    </div>
+  </div>
+  <div id="legend">
+    <div id="legend-title">LEGEND <span id="legend-toggle">▼</span></div>
+    <div class="legend-items">
+      <div style="color:rgba(0,255,240,0.4);font-size:9px;margin-bottom:6px;letter-spacing:1px">NODE TYPES</div>
+      <div class="legend-item"><div class="legend-swatch ellipse" style="background:rgba(123,47,255,0.18);border-color:#7b2fff"></div>Agent</div>
+      <div class="legend-item"><div class="legend-swatch" style="border-radius:3px;background:rgba(0,210,255,0.12);border-color:#00d2ff"></div>Workflow</div>
+      <div class="legend-item"><div class="legend-swatch diamond" style="background:rgba(255,140,0,0.15);border-color:#ff8c00"></div>Automation</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:rgba(0,255,150,0.1);border-color:#00ff96"></div>System</div>
+      <div class="legend-item"><div class="legend-swatch hex" style="background:#c832ff;width:12px;height:12px"></div>Roadmap</div>
+      <div class="legend-item"><div class="legend-swatch" style="border-radius:3px;background:rgba(255,215,0,0.12);border-color:#ffd700"></div>Knowledge</div>
+      <div class="legend-item"><div class="legend-swatch ellipse" style="background:rgba(0,255,150,0.12);border-color:#00ff96"></div>Prediction</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:rgba(0,240,255,0.1);border-color:#00e5ff"></div>Data</div>
+      <div class="legend-item"><div class="legend-swatch" style="border-radius:3px;background:rgba(255,50,150,0.15);border-color:#ff3296"></div>Workstream</div>
+      <div class="legend-sep"></div>
+      <div style="color:rgba(0,255,240,0.4);font-size:9px;margin-bottom:6px;letter-spacing:1px">STATUS</div>
+      <div class="legend-item"><div style="width:12px;height:12px;border-radius:2px;background:rgba(0,255,150,0.3);border:1px solid #00ff96"></div>Done</div>
+      <div class="legend-item"><div style="width:12px;height:12px;border-radius:2px;background:rgba(0,180,255,0.3);border:1px solid #00d2ff"></div>In Progress</div>
+      <div class="legend-item"><div style="width:12px;height:12px;border-radius:2px;background:rgba(255,34,68,0.3);border:1px dashed #ff2244"></div>Blocked</div>
+      <div class="legend-item"><div style="width:12px;height:12px;border-radius:2px;background:rgba(255,140,0,0.3);border:1px solid #ff8c00"></div>Next Up</div>
+      <div class="legend-sep"></div>
+      <div style="color:rgba(0,255,240,0.4);font-size:9px;letter-spacing:1px">LINES = connections</div>
+    </div>
+  </div>
+  <div id="status-bar">
+    <span class="status-item"><span class="status-dot"></span>SYSTEM ONLINE</span>
+    <span class="status-item" id="sb-selected">SELECT NODE TO INSPECT</span>
+    <span class="status-item" style="margin-left:auto">MR WALLS AI COMMAND MAP v2.0 // SANTA MONICA CA</span>
+  </div>
+
+  <script>
+    let cy = null;
+    let currentData = null;
+    let allNodes = [];
+    let allEdges = [];
+
+    // Initialize Cytoscape
+    const INLINE_DATA = {"nodes":[{"id":"root","label":"MR Walls","type":"root","pillar":"root","status":"in-progress","priority":"critical","description":"Architectural wall surfaces made with DuPont Corian. Patented InterlockPanel system. Based in Santa Monica, CA.","nextAction":"Expand AI operations and automation coverage"},{"id":"p-agents","label":"AI Agents","type":"pillar","pillar":"p-agents","status":"in-progress","priority":"critical","description":"Fleet of specialized AI agents handling different aspects of operations"},{"id":"p-workflows","label":"Workflows","type":"pillar","pillar":"p-workflows","status":"in-progress","priority":"high","description":"Defined processes and automations for business operations"},{"id":"p-automations","label":"Automations","type":"pillar","pillar":"p-automations","status":"in-progress","priority":"high","description":"Scheduled jobs and background processes"},{"id":"p-systems","label":"Internal Systems","type":"pillar","pillar":"p-systems","status":"done","priority":"critical","description":"Core platforms and integrations"},{"id":"p-knowledge","label":"Knowledge Base","type":"pillar","pillar":"p-knowledge","status":"in-progress","priority":"high","description":"Documentation, memory, and knowledge systems"},{"id":"p-roadmap","label":"Project Roadmap","type":"pillar","pillar":"p-roadmap","status":"in-progress","priority":"high","description":"Future projects and development initiatives"},{"id":"p-data","label":"Data Infrastructure","type":"pillar","pillar":"p-data","status":"in-progress","priority":"high","description":"Data storage, context, and ingestion systems"},{"id":"p-samantha","label":"Samantha's Workstream","type":"pillar","pillar":"p-samantha","status":"in-progress","priority":"critical","description":"Designer and Tech Lead priorities"},{"id":"p-predictions","label":"Agentic Predictions","type":"pillar","pillar":"p-predictions","status":"in-progress","priority":"high","description":"AI-driven predictions for improvements and blockers"},{"id":"a-jimi","label":"Jimi","type":"agent","pillar":"p-agents","status":"in-progress","priority":"critical","description":"Main studio AI assistant. Purpose: general assistant for Samantha/Carlo/Mario. Handles workflows, lookups, shipping, memory. Lives in main OpenClaw session.","channel":"Discord #general, Slack @mentions","nextAction":"Monitor heartbeat checks; update MEMORY.md with significant events","notes":"Highest authority, longest context window. Handles all primary operations."},{"id":"a-athena","label":"Athena ⚔️","type":"agent","pillar":"p-agents","status":"done","priority":"high","description":"Technical knowledge assistant. Answers design team Q&A from Drawing Details + Design Team Q&A tables in Airtable. Speaks Spanish and English. Has 3 built-in calculators: (1) Low voltage wire formula (amplifier groups + LEDs per group), (2) Corian adhesive calculator (2mL per foot of seam, 50mL per bottle), (3) Wire rolls calculator.","channel":"Discord #athena","notes":"No longer auto-introduces. Redirects unknowns to Samantha or Carlo. Spanish-capable for Emma, Lucia, Belen, Carlo. Sawyer introduced June 9, 2026. Users: Samantha, Carlo, Toni, Belen, Emma, Lucia, Kamila, Sawyer."},{"id":"a-indy","label":"Indy 🐍","type":"agent","pillar":"p-agents","status":"done","priority":"high","description":"Carlo's on-demand action agent. Executes tasks when @mentioned in Carlo's Slack DM. Also takes direction from Samantha. Upgraded to claude-sonnet-4-6 June 2026. Now creates real cron jobs for reminders.","channel":"Slack DM with Carlo","notes":"Reactive only, no proactive scanning. Results only (one short line). Does NOT post in project channels. If Indy can't do something, tells Carlo straight up. Ghost reminder bug fixed June 9: now creates actual cron at-jobs when asked to remind Carlo."},{"id":"a-scout","label":"Scout","type":"agent","pillar":"p-agents","status":"done","priority":"high","description":"Silent background channel scanner. Scans ~246 Carlo-managed Slack project channels, sends digest DMs to Carlo.","channel":"Slack (background)","notes":"Carlo doesn't know Scout exists — presents as 'Indy'. Model: Haiku for scan jobs. Trigger: 8:30AM weekday digest + every 2h spot check.","trigger":"8:30 AM weekdays + every 2 hours"},{"id":"a-janine","label":"Janine","type":"agent","pillar":"p-agents","status":"in-progress","priority":"high","description":"Secretary agent. Shop drawing checker + 5-day no-action project nudges. Speaks Spanish (added June 5 2026 — Victor was first design team member notified). Idempotency check added to prevent duplicate notes: checks for existing notes before creating. Session timeout: 480s (bumped from 240s). thinkingDefault=off.","channel":"Discord #janine","notes":"Took over from Jimi on 2026-05-19. Handles approval notes, BOL logging, SPEC DA archive, install docs monitoring. Cron jobs staggered 10 min apart to avoid session contention. sd-review-monitor backup cron disabled June 5 (Janine handles approvals inline). Known users: design team including Emma, Lucia, Belen, Carlo, Victor, Kamila.","owner":"Janine (transferred 2026-05-19)"},{"id":"w-bol","label":"BOL Airtable Input","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Triggered when BOL PDF arrives. Parse BOL → input to Airtable Shipping table → update crate dims.","owner":"Janine (transferred from Indy)","file":"memory/bol-workflow.md","nextAction":"Maintain BOL parsing accuracy across all shipping events"},{"id":"w-shop-qc","label":"Shop Drawing QC","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Internal shop drawing quality check before client submission. URL: https://mr-walls-shop-drawing-qc.vercel.app/ Upload PDF → scored Pass/Warnings/Critical/Manual → Submit for Review fires when Critical=0.","owner":"Janine","nextAction":"Monitor QC app uptime; notify if scoring system needs adjustment"},{"id":"w-project-done","label":"Mark Project Done","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Triggered when Carlo says project is done. Update Airtable phases → notify Slack.","file":"memory/project-done-workflow.md"},{"id":"w-paid-full","label":"Paid In Full","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Triggered by Carlo. Set Paid=Paid In Full → mark Final Balance task Complete → log Notes Log with Slack submission.","nextAction":"Execute when payment confirmed"},{"id":"w-fedex","label":"FedEx Label Printing","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"On-demand label creation. Ask what's being shipped → create FedEx shipment via API → print to BrotherMFC printer.","notes":"Always ask what's being shipped first. Update Jimi's Addresses table after print.","nextAction":"Always confirm contents before printing"},{"id":"w-spec-da","label":"Spec DA Archive","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Archive SPEC DA project channels.","owner":"Janine","file":"memory/spec-da-archive-workflow.md"},{"id":"w-dash-photos","label":"Google Photos → Dash Pipeline","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Upload project photos to Dash DAM with full metadata. Find project in Airtable → scrape photos via Playwright → get/create Dash option IDs → upload → set metadata (title/folder/design/color/application/sector) → transition to LIVE.","nextAction":"Maintain photo scraping accuracy; verify all metadata fields"},{"id":"w-notes-log","label":"Airtable Notes Logging","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"Log internal updates, approvals, status changes to Notes Log table. Fields: Type, Type of Note Submission, Notes, Tasks, Staff, Submit to Slack."},{"id":"au-scout-digest","label":"Scout Morning Digest","type":"automation","pillar":"p-automations","status":"done","priority":"critical","description":"Scans all ~246 Carlo project channels → one DM digest to Carlo (appears as Indy).","trigger":"8:30 AM weekdays","nextAction":"Monitor digest accuracy and completeness"},{"id":"au-scout-spot","label":"Scout Spot Check","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Pushes urgent items immediately: @Carlo mentions, Designer docs submitted, Change Orders, BOLs, payment events.","trigger":"Every 2 hours weekdays"},{"id":"au-scout-eod","label":"Scout EOD Mention Check","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"End-of-day mention summary.","trigger":"4:00 PM weekdays"},{"id":"au-heartbeat","label":"Jimi Heartbeat","type":"automation","pillar":"p-automations","status":"in-progress","priority":"medium","description":"Periodic proactive check: email, calendar, Scout health, upcoming events.","nextAction":"Implement consistent heartbeat schedule and reporting"},{"id":"au-5day","label":"5-Day No-Action Nudge","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Janine sends nudge to project Slack channel if no activity for 5+ days (respects Custom Reminder Date field).","owner":"Janine (transferred from Jimi 2026-05-19)"},{"id":"s-airtable","label":"Airtable","type":"system","pillar":"p-systems","status":"done","priority":"critical","description":"Primary database. Base: app6MNeWlLW997eVg. Tables: Projects, Tasks, Notes Log, Staff, Jimi's Addresses, Drawing Details, Design Team Q&A, and more.","nextAction":"Maintain data integrity; monitor for schema changes"},{"id":"s-slack","label":"Slack","type":"system","pillar":"p-systems","status":"done","priority":"critical","description":"Primary team comms. ~246 project channels. Jimi/Indy/Scout all use same bot token.","notes":"Shared bot token across multiple agents"},{"id":"s-discord","label":"Discord","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"Jimi's main interface + Athena + Janine + #render-studio. Key channels: #general, #samantha, #athena, #janine, #render-studio, #shop-drawing, #install-doc, #troubleshooting.","notes":"Secondary comms platform"},{"id":"s-flowspace","label":"Flowspace WMS","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"Warehouse management system (WMS). API: api.flow.space/graphql. Auth: Flowspace-Auth header. Org: MR Walls (ed3698ee). ai@marioromano.com activated June 9 2026. Inventory data also mirrored in Airtable (26 component items with Orderer + Source fields).","notes":"API confirmed live June 9 2026. Scripts query Airtable mirror table for component data. Used by Pipeline Safety Net + Component Calculator.","nextAction":"Monitor inventory levels via Pipeline Safety Net"},{"id":"s-dash","label":"Dash DAM","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"Digital asset management at mrwalls.dash.app. Full upload pipeline with Playwright scraping + API.","nextAction":"Monitor token refresh; verify upload pipeline stability"},{"id":"s-fedex","label":"FedEx Direct API","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"Shipping labels. Account: 640651377 (ROMANO STUDIO LLC). Auth via OAuth.","notes":"Account Number: 640651377"},{"id":"s-easypost","label":"EasyPost","type":"system","pillar":"p-systems","status":"done","priority":"low","description":"Backup shipping API. NOTE: charges at label creation (not scan).","notes":"Use FedEx Direct by default unless explicitly requested"},{"id":"s-copper","label":"Copper CRM","type":"system","pillar":"p-systems","status":"done","priority":"low","description":"Sales CRM. Used from #parcel channel to log shipping contacts."},{"id":"s-github","label":"GitHub","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"Repos: mariosromano/mr-walls-shop-drawing-qc (shop drawing app) + mariosromano/Render-Studio-Banana.","notes":"Token available for PR/issue operations"},{"id":"s-fal","label":"FAL AI","type":"system","pillar":"p-systems","status":"done","priority":"medium","description":"Image generation API."},{"id":"s-openai","label":"OpenAI","type":"system","pillar":"p-systems","status":"done","priority":"high","description":"API access for AI tasks."},{"id":"s-gog","label":"gog CLI","type":"system","pillar":"p-systems","status":"done","priority":"medium","description":"Google Workspace access. Accounts: carlo@marioromano.com, ai@marioromano.com. Services: Gmail, Calendar, Drive, Contacts.","notes":"Multi-account support"},{"id":"k-tools","label":"TOOLS.md","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"critical","description":"Master reference for all API keys, tool configs, workflows, and rules. Source of truth for credentials.","notes":"Updated 2026-06-09"},{"id":"k-memory","label":"MEMORY.md","type":"knowledge","pillar":"p-knowledge","status":"in-progress","priority":"high","description":"Jimi's long-term curated memory. Contains team, agents, rules, monitored channels.","nextAction":"Review daily files and update with significant events"},{"id":"k-agents","label":"AGENTS.md","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"high","description":"Agent operating rules, memory guidelines, heartbeat behavior."},{"id":"k-workflows","label":"Workflow Memory Files","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"high","description":"memory/bol-workflow.md, memory/spec-da-archive-workflow.md, memory/project-done-workflow.md","notes":"Step-by-step workflow guides"},{"id":"k-shop-qc-app","label":"Shop Drawing QC App","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"high","description":"Vercel app at mr-walls-shop-drawing-qc.vercel.app. Pass/fail scoring system."},{"id":"k-wire-formula","label":"Low Voltage Wire Formula","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"medium","description":"LED strip wire calculation formula reverse-engineered from Samantha's spreadsheet. Stored in Athena's KNOWLEDGE.md.","date":"2026-06-05"},{"id":"k-user","label":"USER.md","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"high","description":"Team context: Mario (Owner), Samantha (Designer/Tech Lead), Carlo (VP Ops). Design team: Emma Ruiz, Lucia (Debonis), Belen, Kamila Weiss, Victor (design team member). Sales team: Toni Vrapi, Kamila Weiss, Sawyer. Intern: Aiden (June-Aug 2026). Production/Ops: Dania (ordering), Sawyer."},{"id":"r-shop-qc","label":"Shop Drawing QC Checker","type":"roadmap","pillar":"p-roadmap","status":"done","priority":"high","description":"Vercel app, fully deployed."},{"id":"r-dash","label":"Dash Upload Pipeline","type":"roadmap","pillar":"p-roadmap","status":"done","priority":"high","description":"Google Photos → Dash full pipeline with metadata."},{"id":"r-agents","label":"Scout/Indy/Janine System","type":"roadmap","pillar":"p-roadmap","status":"done","priority":"critical","description":"Multi-agent system for Carlo's channel management and shop workflow."},{"id":"r-athena","label":"Athena Knowledge Base","type":"roadmap","pillar":"p-roadmap","status":"done","priority":"high","description":"Technical Q&A agent for design team."},{"id":"r-flowspace","label":"Flowspace Integration","type":"roadmap","pillar":"p-roadmap","status":"done","priority":"high","description":"WMS API integration for inventory/shipping.","notes":"Fully built and running as of June 3 2026. API unblocked June 9 2026.","nextAction":"Design Flowspace → Airtable inventory sync"},{"id":"r-command-map","label":"MR Walls Command Map","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"high","description":"Visual operating brain for all MR Walls systems.","nextAction":"Complete visual node map; deploy to production"},{"id":"r-render-studio","label":"Render Studio Banana","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"medium","description":"AI render workflow tool. Repo: mariosromano/Render-Studio-Banana.","nextAction":"Define agent inputs/outputs for FAL AI workflow"},{"id":"r-boxx","label":"BOXX AI Repurposing","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"medium","description":"BOXX workstation fleet: 8 machines total. Two unassigned AI candidates: Neo/Carlogomez (B192087, now OpenClaw node) and Legacy (B194275, unassigned). Recommended local models: Qwen3-32B or Gemma 3 27B Q4_K_M (both fit 24GB VRAM on RTX A5000). Ollama for local inference.","notes":"Full fleet: reeds (Lucia, RTX PRO 4500 32GB), Samantha (RTX 5080 16GB), Desktop1 (Carlo, RTX A5000 24GB), Emma (RTX A5000 24GB), Belen (RTX A5000 24GB), Neo (OpenClaw node), Legacy (unassigned), Kamila (RTX 2080 Ti, oldest)."},{"id":"r-aiden","label":"Aiden Intern Onboarding","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"medium","description":"Rhino user interning June 1 – Aug 8, 2026."},{"id":"d-workspace","label":"Workspace Context Files","type":"data","pillar":"p-data","status":"done","priority":"critical","description":"/Users/mrwalls/.openclaw/workspace/ — all MEMORY, SOUL, USER, TOOLS, AGENTS files."},{"id":"d-memory-files","label":"Daily Memory Files","type":"data","pillar":"p-data","status":"in-progress","priority":"high","description":"memory/YYYY-MM-DD.md daily logs.","nextAction":"Maintain consistent daily logging"},{"id":"d-airtable-truth","label":"Airtable as Source of Truth","type":"data","pillar":"p-data","status":"done","priority":"critical","description":"Projects, Tasks, Staff tables are canonical."},{"id":"d-discord-exports","label":"Discord Exports","type":"data","pillar":"p-data","status":"future","priority":"medium","description":"Chat history from key channels."},{"id":"d-context-folder","label":"Context Ingestion Folder","type":"data","pillar":"p-data","status":"next","priority":"medium","description":"/context/mr-walls/ drop zone for raw notes, exports, SOPs."},{"id":"sw-command-map","label":"Command Map Build","type":"workstream","pillar":"p-samantha","status":"in-progress","priority":"critical","description":"Current top priority: build this app.","nextAction":"Deploy and validate node connections"},{"id":"sw-low-voltage","label":"Low Voltage Wire Formula","type":"workstream","pillar":"p-samantha","status":"done","priority":"high","description":"Reverse-engineered formula, added to Athena.","date":"2026-06-05"},{"id":"sw-shop-qc-deploy","label":"Shop Drawing QC Deployment","type":"workstream","pillar":"p-samantha","status":"done","priority":"high","description":"Vercel deploy of QC app."},{"id":"sw-flowspace-blocker","label":"Flowspace Integration ✅","type":"workstream","pillar":"p-samantha","status":"done","priority":"high","description":"Flowspace ai@marioromano.com email activated June 9 2026. API connected.","nextAction":"Follow up with Mario on email activation"},{"id":"sw-render-studio","label":"Render Studio Banana","type":"workstream","pillar":"p-samantha","status":"in-progress","priority":"medium","description":"AI render workflow development."},{"id":"sw-aiden","label":"Aiden Intern Setup","type":"workstream","pillar":"p-samantha","status":"in-progress","priority":"medium","description":"Rhino user intern, June–August."},{"id":"pred-workflow","label":"Improve Shop Drawing Submission Flow","type":"prediction","pillar":"p-predictions","status":"next","priority":"high","description":"Highest-priority workflow improvement. Confidence: High. Manual steps remain in approval logging.","nextAction":"Automate Airtable note creation after QC pass"},{"id":"pred-agent","label":"Build Render Studio Agent","type":"prediction","pillar":"p-predictions","status":"next","priority":"high","description":"Most useful next agent. Confidence: High. Render Studio Banana is in-progress and needs AI orchestration.","nextAction":"Define agent inputs/outputs for FAL AI workflow"},{"id":"pred-automation","label":"Automate Flowspace → Airtable Sync","type":"prediction","pillar":"p-predictions","status":"done","priority":"high","description":"Biggest automation time-saver once unblocked. Confidence: Medium. Manual inventory updates drain time.","notes":"DONE — Flowspace → Airtable sync running since June 2026","nextAction":"Build Flowspace → Airtable sync now"},{"id":"pred-blocker","label":"Flowspace Email Activation","type":"prediction","pillar":"p-predictions","status":"done","priority":"critical","description":"Flowspace email activation — RESOLVED June 9 2026.","nextAction":"Follow up with Mario"},{"id":"pred-cleanup","label":"Context File Deduplication","type":"prediction","pillar":"p-predictions","status":"next","priority":"medium","description":"MEMORY.md and TOOLS.md have overlapping/stale data. Confidence: Medium. Memory drift causes agent confusion.","nextAction":"Audit and deduplicate files"},{"id":"pred-docs","label":"Missing Athena Onboarding Doc","type":"prediction","pillar":"p-predictions","status":"next","priority":"medium","description":"Design team doesn't have a guide to using Athena. Confidence: High.","nextAction":"Write SOP for design team on how to query Athena"},{"id":"a-goblin","label":"🐿️ Goblin","type":"agent","pillar":"p-agents","status":"done","priority":"high","description":"Payment reminder + New Project phase check bot. Scans Airtable daily at 10AM for stale New Project phases, DMs sales people. When project hits Install Consult/Install, checks Paid In Full status and reminds salesperson if unpaid. Separate Discord/Slack bot account.","trigger":"10AM daily (phases) + phase transition event (payment)","tools":"Airtable, Slack DM","notes":"Presents as a separate bot (🐿️), not Jimi. 3-day cooldown per project. Phase reply poller runs every 30min 9AM-6PM. Designed in #task-goblin.","nextAction":"Monitor payment check reliability"},{"id":"au-brief","label":"Morning Brief System","type":"automation","pillar":"p-automations","status":"in-progress","priority":"critical","description":"Daily morning brief pipeline for Samantha. 4 cron jobs run at 8:25–8:30 AM weekdays: brief-airtable (fetches project counts + open tasks), brief-email (reads Gmail), brief-slack (scans ~23 project channels), brief-assembler (combines and sends to #samantha Discord).","trigger":"Weekdays 8:25–8:30 AM PT","output":"Morning summary in Discord #samantha","notes":"Recurring timeout failures — brief-airtable and brief-assembler most affected. Timeouts bumped to 240s/300s. brief-airtable uses Samantha staff record rec0dIRxb3M3rxwhj. Brief-slack scans 23 Slack channels.","nextAction":"Fix brief-airtable cron timeout (still failing as of 2026-06-09)"},{"id":"r-install-checker","label":"Install Doc Checker (Planned)","type":"roadmap","pillar":"p-roadmap","status":"next","priority":"high","description":"Planned QC web app for install documents — same architecture as Shop Drawing QC Checker. Two document types: (1) Standard Backlit Install Guide = 8 pages: Packing List, Framing Diagram, LED Channel Diagram, LED Placement Diagram, LED Group Diagram, Steps 1-3 Wiring. (2) Programmable Backlit Install Guide = 11 pages: Components, Framing, Channel, LED Diagram, LED Data Step 1 (clipping), LED Data Step 2 (Transceivers+Cat6), LED Power, Housing Data, Housing Power 1+2, Testing the System. One app with document type selector up front — shared scoring/Airtable/Slack, per-type rulesets.","notes":"Spec fully defined in #install-doc May 2026. Shared checks: title block on every page, sales rep + contact, framing dimensions, components packing list. Programmable-only: DiGidot, Transceivers, Cat6, Housing Data, Testing page.","nextAction":"Build it — spec is fully defined, fork Shop Drawing QC repo"},{"id":"r-shop-qc-multi","label":"Shop QC Multi-File Batch","type":"roadmap","pillar":"p-roadmap","status":"next","priority":"medium","description":"Planned feature for Shop Drawing QC checker: batch upload multiple PDFs for a project at once. Answer project questions once, run all drawings through checker, show side-by-side result cards. Needed because projects with multiple walls have multiple drawings.","nextAction":"Add batch upload to mr-walls-shop-drawing-qc repo"},{"id":"r-shop-qc-review","label":"Shop QC Manager Review Link","type":"roadmap","pillar":"p-roadmap","status":"next","priority":"medium","description":"After drawing passes QC checker, generate a shareable results page/link the designer can send to manager. Manager sees full pass report (checks, notes, filename) without re-running the tool. Keeps existing Slack handoff workflow intact.","nextAction":"Implement shareable results URL in QC app"},{"id":"r-render-studio-detail","label":"Render Studio — FAL Environments","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"medium","description":"Live at render-studio-banana.vercel.app. Takes 3D renders (up to 5 reference images) and uses FAL AI to place them in realistic environments: hotel lobby, hospital, corporate, museum, spa, airport. Context presets + material tweaks. ~$0.15/image via FAL Nano Banana. Known issue: FAL credits can run out (need top-up at fal.ai/dashboard/billing).","notes":"Drag & drop added to reference image box. GitHub write token obtained from Mario. Vercel auto-deploys on push.","nextAction":"Ensure FAL credits are maintained; plan next feature set"},{"id":"sw-priority-board","label":"Samantha's Priority Board (Jimi Block)","type":"workstream","pillar":"p-samantha","status":"in-progress","priority":"medium","description":"Samantha's active task backlog tracked in a priority board. Jimi Block items include: Production File Closeout Form, reminder to check in on shipping/install, keep inventory count at fabricators, compare fabricator inventory to upcoming projects.","nextAction":"Build Production File Closeout Form"},{"id":"au-goblin-payment","label":"🐿️ Goblin Payment Check","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Daily at 9:30 AM (M-F): Goblin scans Airtable for projects in Install Consult or Install phase that are NOT Paid In Full. DMs the assigned salesperson reminding them payment is outstanding. 3-day cooldown per project to prevent spam.","trigger":"Cron 9:30 AM M-F","notes":"Staggered from Janine shipping checks (9:00-9:20 AM M/Th). Messages come from Goblin bot, not Jimi."},{"id":"au-goblin-phases","label":"🐿️ Goblin Phase Check","type":"automation","pillar":"p-automations","status":"done","priority":"medium","description":"Daily at 10 AM: Goblin scans for New Project phases still In Progress for >1 day. DMs assigned sales person via Slack. If they reply \"done\" → marks phase Complete in Airtable. If \"still working\" → acknowledges and tries again next day. Reply poller runs every 30 min 9AM-6PM.","trigger":"Cron 10 AM daily + reply poller every 30 min","notes":"Carlos report includes all projects flagged and who was messaged."},{"id":"r-sales-onboarding","label":"Sales Team AI Onboarding","type":"roadmap","pillar":"p-roadmap","status":"in-progress","priority":"medium","description":"AI tools onboarding for sales team: Toni Vrapi, Kamila Weiss. Calendar meeting held (Sales x AI Onboarding, 2pm). Ongoing — familiarizing team with Jimi, Indy, Goblin, and automation workflows.","nextAction":"Follow up post-onboarding, document what each salesperson needs"},{"id":"r-prod-closeout","label":"Production File Closeout Form","type":"roadmap","pillar":"p-roadmap","status":"next","priority":"medium","description":"Planned: formal production file closeout checklist/form for when a project ships. Currently a manual process. Item from Samantha's Priority Board.","nextAction":"Define requirements and build form"},{"id":"d-brief-files","label":"Brief Pipeline Files","type":"data","pillar":"p-data","status":"in-progress","priority":"high","description":"Temp files written by morning brief cron jobs: /tmp/brief-airtable.json (project counts + open tasks), /tmp/brief-email.json (actionable emails), /tmp/brief-slack.json (Slack channel scan results). Brief-assembler reads all three and writes final message.","notes":"Files are temp — written fresh each morning. Assembler depends on all three being present."},{"id":"a-parcel","label":"Parcel 📦","type":"agent","pillar":"p-agents","status":"done","priority":"high","description":"M|R Walls shipping assistant bot. Separate OpenClaw agent with own Slack app (socket mode) and workspace at ~/.openclaw/workspace-parcel. Handles FedEx + EasyPost rate comparison, label creation, label printing to BrotherMFC, and Copper CRM logging. Runs on Claude Sonnet.","channel":"Slack #parcel","notes":"Own Slack bot account. Personality: lighthearted, shipping puns, 📦 energy. Scripts: get-rates.sh (FedEx+EasyPost comparison), container-menu.sh (box sizes). Updates Jimi's Addresses table in Airtable after each shipment.","trigger":"Slack #parcel channel message","nextAction":"Monitor label accuracy; keep Jimi's Addresses updated"},{"id":"s-neo","label":"Neo (Windows Node)","type":"system","pillar":"p-systems","status":"in-progress","priority":"medium","description":"Windows PC node paired with OpenClaw. AMD Ryzen 9 5900X, 64 GB RAM. Used for Nano Banana pipeline and browser automation. 52 skills installed (6 ready). IPs: 192.168.1.237 / 192.168.1.182. Needs openclaw node run to stay connected — keep-alive.cmd script handles auto-restart.","notes":"Intermittent connectivity — must have PowerShell window open with node process running. Shared between Jimi gateway (port 18789) and Claudio gateway (port 19789). Last confirmed online May 19, 2026.","nextAction":"Verify Neo is online; ensure keep-alive.cmd is set as startup task"},{"id":"s-claudio","label":"Claudio Gateway","type":"system","pillar":"p-systems","status":"done","priority":"low","description":"Second OpenClaw gateway instance running on the Mac mini at port 19789. Shares Neo Windows node with the main Jimi gateway. Less actively used. Dashboard at http://127.0.0.1:19789/","notes":"Separate from main Jimi gateway (port 18789). Originally set up to give Neo access to a second gateway. Token: mrwalls-neo-node-2026."},{"id":"w-nano-banana","label":"Nano Banana Render Pipeline","type":"workflow","pillar":"p-workflows","status":"done","priority":"high","description":"AI render workflow for project photos. Steps: (1) Get project photos from Google Photos album, (2) Vision filter — GPT-4o scores each photo for shot type (wide vs close-up) and quality (0.0–1.0), (3) Wide shots scoring ≥0.6 go through FAL AI Nano Banana model — renders each in 6 environment presets: hotel lobby, hospital, corporate, museum, spa, airport, (4) Upload rendered images to Dash DAM with metadata. Runs as Python script on Mac mini.","notes":"Channel: #dash-nanobanana. FAL model: Nano Banana (~/bin/zsh.15/image). 6 presets × N wide shots = batch of renders. GPT-4o vision filter is inconsistent — some manual curation in Dash still needed. Tested on Chartwell Edgewater (4 wide shots × 6 presets = 24 renders).","nextAction":"Refine vision filter consistency; monitor FAL credit levels"},{"id":"au-parcel-pickup","label":"FedEx Pickup Scheduling","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"After label print, Parcel schedules a FedEx pickup via schedule-pickup.sh script. Was broken for months (missing carrierCode: FDXG in API call) — fixed June 5, 2026. Pickup window: 2–6 PM. If scheduling fails, Parcel notifies user with fallback options (drop-off or call FedEx).","notes":"Script: workspace-parcel/scripts/schedule-pickup.sh. Fix: added carrierCode: FDXG to FedEx API payload. First successful pickup: CPU1465161561.","trigger":"After FedEx label creation in #parcel"},{"id":"w-parcel-copper","label":"Parcel → Copper CRM Logging","type":"workflow","pillar":"p-workflows","status":"in-progress","priority":"medium","description":"After each label print, Parcel looks up the recipient in Copper CRM by name/email. Found → updates address + logs ship note. Not found → creates new Person record with name, company, address, phone, email. Being wired in as of June 8-9, 2026 alongside existing Jimi's Addresses Airtable logging.","notes":"Copper API key: mario@marioromano.com. In addition to Airtable Jimi's Addresses table (not replacing). Will also backfill email addresses from Copper into existing Airtable records.","nextAction":"Complete wiring; test end-to-end with next shipment"},{"id":"s-qlcplus","label":"QLC+ / DMX Lighting","type":"system","pillar":"p-systems","status":"done","priority":"low","description":"DMX lighting control software (QLC+) used by Samantha for programmable lighting in studio/installations. Hardware: DiGiodot C4 Extended DMX controller. Used to configure and control fixture channels, groups, and scenes.","notes":"QLC+ runs on a separate machine (not Mac mini). DiGiodot C4 Extended firmware update: use Chrome/Firefox, wired connection same subnet. Jimi helped with fixture patching May 2026."},{"id":"au-pipeline-safety-net","label":"🛡️ Pipeline Safety Net","type":"automation","pillar":"p-automations","status":"done","priority":"critical","description":"Runs every 30 min during business hours (8am–6pm PT weekdays). Cross-references active backlit projects (RGB + White) in Airtable against live Flowspace inventory. Posts full inventory check to Discord #flowspace channel. Shows component demand vs. available + inbound stock with ✅/⚠️ alerts.","trigger":"Every 30 min 8am–6pm PT weekdays","output":"Discord #flowspace (1481693127055118447)","notes":"Excludes Fake Project and Dummy Project. Only checks Backlit = RGB or White projects. Posts even when all clear (safety net = always on). Fixed June 9 to exclude test projects."},{"id":"au-component-calculator","label":"⚙️ Backlit Component Calculator","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Scans Airtable for backlit projects entering trigger phase (Production File). Calculates LED component quantities for each wall (aluminum channel, LED rolls, drivers, amplifiers, clear lens, wire, etc.). Writes calculated quantities back to the Walls per Project records in Airtable. Restricted to business hours (8am–6pm PT weekdays). Only runs on RGB + White backlit projects.","trigger":"Project phase transition → Production File","notes":"Writes to Walls per Project table in Airtable. Component types: 14 AWG Wire, AAA Batteries, Acrylic Stiffeners, Aluminum Channel (72\"), Amplifiers, Clear Lens (72\"), Driver (600W), Fuse Holders, Fuses, LED Rolls, Pigtail Plug, RGB Receiver, RGB Remote, RGB Wire Rolls, Wire Nuts."},{"id":"au-shortage-alert","label":"📧 Component Shortage Alert","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Weekday mornings at 8am: emails Dania, Sawyer, and Carlo when any component is short or tight vs. pipeline demand. HTML email with color-coded table (red=SHORT, orange=TIGHT, green=OK). Includes Orderer and Order From columns from Flowspace Airtable table. Sent from ai@marioromano.com. Footer note: consult Carlo on project timelines before ordering.","trigger":"Cron 8am weekdays — only fires when there is a shortage","output":"Email to dania@marioromano.com, sawyer@marioromano.com, carlo@marioromano.com"},{"id":"d-flowspace-table","label":"Flowspace Component Table (Airtable)","type":"data","pillar":"p-data","status":"done","priority":"high","description":"Airtable table (in app6MNeWlLW997eVg) mirroring Flowspace inventory component info. 26 items with fields: Name, M|R Orderer, Source (where to order from), Value. Used by shortage alert emails to show who orders each component and how. Dania is the primary orderer for most items.","notes":"Not a live sync — reference table for orderer/source metadata. Live inventory levels come from Flowspace API directly."},{"id":"s-legacy","label":"Legacy (BOXX Node)","type":"system","pillar":"p-systems","status":"next","priority":"medium","description":"Second unassigned BOXX workstation. Serial B194275. Specs: Ryzen 9 5900X, 64GB DDR4, RTX A5000 24GB VRAM, Windows 10 Pro. Identical spec to Neo (B192087). Recommended for AI repurposing as second local compute node alongside Neo. Can run Qwen3-32B or Gemma 3 27B Q4_K_M locally via Ollama.","notes":"Nobody currently using it. Strongest local AI candidate after Neo. Setup requires: install OpenClaw, pair as node, install Ollama, load models.","nextAction":"Set up as second OpenClaw compute node with Ollama"},{"id":"k-athena-calcs","label":"Athena Calculators","type":"knowledge","pillar":"p-knowledge","status":"done","priority":"high","description":"Three built-in calculators in Athena's KNOWLEDGE.md: (1) Low Voltage Wire Formula — asks for amplifier groups (n) and LEDs per group (S), returns wire lengths and roll count. (2) Corian Adhesive Calculator — 2mL per foot of seam, 50mL per bottle; asks for feet of seam, returns mL + bottle count. (3) Wire Rolls Calculator — derived from same formula.","notes":"Wire formula reverse-engineered from Samantha's spreadsheet June 5 2026. Adhesive calculator added June 5 2026. Athena also speaks Spanish for design team (Emma, Lucia, Belen, Carlo)."},{"id":"r-ollama-local","label":"Local AI / Ollama on BOXX","type":"roadmap","pillar":"p-roadmap","status":"next","priority":"medium","description":"Planned: run local AI models via Ollama on unassigned BOXX workstations (Neo already set up as OpenClaw node, Legacy is next candidate). Would enable local inference without API costs. Recommended models for 24GB VRAM: Qwen3-32B Q4_K_M (~20GB) or Gemma 3 27B Q4_K_M (~16GB). Best machine: reeds (Lucia, RTX PRO 4500 32GB) could run 70B models.","notes":"Neo has Ollama installed but not yet actively used for production workloads. Local inference would be cost-free after setup. Discussed April 2026 in #studiocomputers."},{"id":"au-email-monitor","label":"Hourly Email Monitor","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Runs every hour during business hours, monitors samantha@marioromano.com for actionable emails, posts summaries to Discord #samanthaemail. Filters out promos/automated alerts, only surfaces real items needing attention. Separate from the morning brief.","trigger":"Every hour during business hours","output":"Discord #samanthaemail (1480725204799066245)","notes":"Uses gog CLI + ai@marioromano.com. Stays silent when nothing actionable. Surfaces urgency levels: URGENT / Informational."},{"id":"au-dash-weekly","label":"Weekly Dash Auto-Upload","type":"automation","pillar":"p-automations","status":"done","priority":"high","description":"Every Friday: scans Airtable for projects in Internal or External Production phases with a Render Folder URL set. Automatically runs Google Photos to Dash pipeline for any not yet uploaded. Tracks state in dash-upload-state.json to avoid re-uploading.","trigger":"Every Friday (cron)","notes":"State file: dash-upload-state.json. Criteria: phase = Internal/External Production + Render Folder URL set + not already uploaded. 9+ projects processed as of May 2026. LaunchAgent configured. Key bugs fixed May 31: duplicate folder issue, Playwright scroll timeout, subfolder ID caching."},{"id":"au-goblin-client-reminders","label":"Goblin Client Reminders","type":"automation","pillar":"p-automations","status":"done","priority":"medium","description":"Early Goblin automation: two reminder cron jobs running at 9am weekdays — delivery-address-reminder and client-followup-reminder. Remind sales team about outstanding delivery addresses and pending client follow-ups. Were running before the New Project phase checker was added.","trigger":"9am weekdays","notes":"ackReaction: eyes (👀). Both confirmed running as of May 19 2026."}],"edges":[{"id":"root-p-agents","source":"root","target":"p-agents"},{"id":"root-p-workflows","source":"root","target":"p-workflows"},{"id":"root-p-automations","source":"root","target":"p-automations"},{"id":"root-p-systems","source":"root","target":"p-systems"},{"id":"root-p-knowledge","source":"root","target":"p-knowledge"},{"id":"root-p-roadmap","source":"root","target":"p-roadmap"},{"id":"root-p-data","source":"root","target":"p-data"},{"id":"root-p-samantha","source":"root","target":"p-samantha"},{"id":"root-p-predictions","source":"root","target":"p-predictions"},{"id":"p-agents-a-jimi","source":"p-agents","target":"a-jimi"},{"id":"p-agents-a-athena","source":"p-agents","target":"a-athena"},{"id":"p-agents-a-indy","source":"p-agents","target":"a-indy"},{"id":"p-agents-a-scout","source":"p-agents","target":"a-scout"},{"id":"p-agents-a-janine","source":"p-agents","target":"a-janine"},{"id":"p-workflows-w-bol","source":"p-workflows","target":"w-bol"},{"id":"p-workflows-w-shop-qc","source":"p-workflows","target":"w-shop-qc"},{"id":"p-workflows-w-project-done","source":"p-workflows","target":"w-project-done"},{"id":"p-workflows-w-paid-full","source":"p-workflows","target":"w-paid-full"},{"id":"p-workflows-w-fedex","source":"p-workflows","target":"w-fedex"},{"id":"p-workflows-w-spec-da","source":"p-workflows","target":"w-spec-da"},{"id":"p-workflows-w-dash-photos","source":"p-workflows","target":"w-dash-photos"},{"id":"p-workflows-w-notes-log","source":"p-workflows","target":"w-notes-log"},{"id":"p-automations-au-scout-digest","source":"p-automations","target":"au-scout-digest"},{"id":"p-automations-au-scout-spot","source":"p-automations","target":"au-scout-spot"},{"id":"p-automations-au-scout-eod","source":"p-automations","target":"au-scout-eod"},{"id":"p-automations-au-heartbeat","source":"p-automations","target":"au-heartbeat"},{"id":"p-automations-au-5day","source":"p-automations","target":"au-5day"},{"id":"p-systems-s-airtable","source":"p-systems","target":"s-airtable"},{"id":"p-systems-s-slack","source":"p-systems","target":"s-slack"},{"id":"p-systems-s-discord","source":"p-systems","target":"s-discord"},{"id":"p-systems-s-flowspace","source":"p-systems","target":"s-flowspace"},{"id":"p-systems-s-dash","source":"p-systems","target":"s-dash"},{"id":"p-systems-s-fedex","source":"p-systems","target":"s-fedex"},{"id":"p-systems-s-easypost","source":"p-systems","target":"s-easypost"},{"id":"p-systems-s-copper","source":"p-systems","target":"s-copper"},{"id":"p-systems-s-github","source":"p-systems","target":"s-github"},{"id":"p-systems-s-fal","source":"p-systems","target":"s-fal"},{"id":"p-systems-s-openai","source":"p-systems","target":"s-openai"},{"id":"p-systems-s-gog","source":"p-systems","target":"s-gog"},{"id":"p-knowledge-k-tools","source":"p-knowledge","target":"k-tools"},{"id":"p-knowledge-k-memory","source":"p-knowledge","target":"k-memory"},{"id":"p-knowledge-k-agents","source":"p-knowledge","target":"k-agents"},{"id":"p-knowledge-k-workflows","source":"p-knowledge","target":"k-workflows"},{"id":"p-knowledge-k-shop-qc-app","source":"p-knowledge","target":"k-shop-qc-app"},{"id":"p-knowledge-k-wire-formula","source":"p-knowledge","target":"k-wire-formula"},{"id":"p-knowledge-k-user","source":"p-knowledge","target":"k-user"},{"id":"p-roadmap-r-shop-qc","source":"p-roadmap","target":"r-shop-qc"},{"id":"p-roadmap-r-dash","source":"p-roadmap","target":"r-dash"},{"id":"p-roadmap-r-agents","source":"p-roadmap","target":"r-agents"},{"id":"p-roadmap-r-athena","source":"p-roadmap","target":"r-athena"},{"id":"p-roadmap-r-flowspace","source":"p-roadmap","target":"r-flowspace"},{"id":"p-roadmap-r-command-map","source":"p-roadmap","target":"r-command-map"},{"id":"p-roadmap-r-render-studio","source":"p-roadmap","target":"r-render-studio"},{"id":"p-roadmap-r-boxx","source":"p-roadmap","target":"r-boxx"},{"id":"p-roadmap-r-aiden","source":"p-roadmap","target":"r-aiden"},{"id":"p-data-d-workspace","source":"p-data","target":"d-workspace"},{"id":"p-data-d-memory-files","source":"p-data","target":"d-memory-files"},{"id":"p-data-d-airtable-truth","source":"p-data","target":"d-airtable-truth"},{"id":"p-data-d-discord-exports","source":"p-data","target":"d-discord-exports"},{"id":"p-data-d-context-folder","source":"p-data","target":"d-context-folder"},{"id":"p-samantha-sw-command-map","source":"p-samantha","target":"sw-command-map"},{"id":"p-samantha-sw-low-voltage","source":"p-samantha","target":"sw-low-voltage"},{"id":"p-samantha-sw-shop-qc-deploy","source":"p-samantha","target":"sw-shop-qc-deploy"},{"id":"p-samantha-sw-flowspace-blocker","source":"p-samantha","target":"sw-flowspace-blocker"},{"id":"p-samantha-sw-render-studio","source":"p-samantha","target":"sw-render-studio"},{"id":"p-samantha-sw-aiden","source":"p-samantha","target":"sw-aiden"},{"id":"p-predictions-pred-workflow","source":"p-predictions","target":"pred-workflow"},{"id":"p-predictions-pred-agent","source":"p-predictions","target":"pred-agent"},{"id":"p-predictions-pred-automation","source":"p-predictions","target":"pred-automation"},{"id":"p-predictions-pred-blocker","source":"p-predictions","target":"pred-blocker"},{"id":"p-predictions-pred-cleanup","source":"p-predictions","target":"pred-cleanup"},{"id":"p-predictions-pred-docs","source":"p-predictions","target":"pred-docs"},{"id":"a-jimi-s-airtable","source":"a-jimi","target":"s-airtable"},{"id":"a-jimi-s-slack","source":"a-jimi","target":"s-slack"},{"id":"a-jimi-s-discord","source":"a-jimi","target":"s-discord"},{"id":"a-jimi-s-fedex","source":"a-jimi","target":"s-fedex"},{"id":"a-jimi-s-dash","source":"a-jimi","target":"s-dash"},{"id":"a-athena-s-airtable","source":"a-athena","target":"s-airtable"},{"id":"a-athena-s-discord","source":"a-athena","target":"s-discord"},{"id":"a-indy-s-airtable","source":"a-indy","target":"s-airtable"},{"id":"a-indy-s-slack","source":"a-indy","target":"s-slack"},{"id":"a-indy-s-gog","source":"a-indy","target":"s-gog"},{"id":"a-scout-s-slack","source":"a-scout","target":"s-slack"},{"id":"a-janine-s-slack","source":"a-janine","target":"s-slack"},{"id":"a-janine-s-discord","source":"a-janine","target":"s-discord"},{"id":"a-janine-s-airtable","source":"a-janine","target":"s-airtable"},{"id":"w-dash-photos-s-dash","source":"w-dash-photos","target":"s-dash"},{"id":"w-dash-photos-s-airtable","source":"w-dash-photos","target":"s-airtable"},{"id":"w-fedex-s-fedex","source":"w-fedex","target":"s-fedex"},{"id":"w-notes-log-s-airtable","source":"w-notes-log","target":"s-airtable"},{"id":"w-notes-log-s-slack","source":"w-notes-log","target":"s-slack"},{"id":"au-scout-digest-a-scout","source":"au-scout-digest","target":"a-scout"},{"id":"au-5day-a-janine","source":"au-5day","target":"a-janine"},{"id":"sw-command-map-r-command-map","source":"sw-command-map","target":"r-command-map"},{"id":"pred-agent-r-render-studio","source":"pred-agent","target":"r-render-studio"},{"id":"pred-workflow-w-shop-qc","source":"pred-workflow","target":"w-shop-qc"},{"id":"pred-blocker-r-flowspace","source":"pred-blocker","target":"r-flowspace"},{"id":"e-a-goblin","source":"p-agents","target":"a-goblin"},{"id":"e-au-brief","source":"p-automations","target":"au-brief"},{"id":"e-r-install","source":"p-roadmap","target":"r-install-checker"},{"id":"e-r-shop-multi","source":"p-roadmap","target":"r-shop-qc-multi"},{"id":"e-r-shop-review","source":"p-roadmap","target":"r-shop-qc-review"},{"id":"e-r-render","source":"p-roadmap","target":"r-render-studio-detail"},{"id":"e-sw-board","source":"p-samantha","target":"sw-priority-board"},{"id":"e-au-goblin-pay","source":"p-automations","target":"au-goblin-payment"},{"id":"e-au-goblin-phase","source":"p-automations","target":"au-goblin-phases"},{"id":"e-r-sales","source":"p-roadmap","target":"r-sales-onboarding"},{"id":"e-r-closeout","source":"p-roadmap","target":"r-prod-closeout"},{"id":"e-d-brief","source":"p-data","target":"d-brief-files"},{"id":"e-goblin-airtable","source":"a-goblin","target":"s-airtable"},{"id":"e-goblin-slack","source":"a-goblin","target":"s-slack"},{"id":"e-brief-slack","source":"au-brief","target":"s-slack"},{"id":"e-brief-gog","source":"au-brief","target":"s-gog"},{"id":"e-brief-airtable","source":"au-brief","target":"s-airtable"},{"id":"e-render-fal","source":"r-render-studio-detail","target":"s-fal"},{"id":"e-render-github","source":"r-render-studio-detail","target":"s-github"},{"id":"e-install-checker-shop","source":"r-install-checker","target":"r-shop-qc"},{"id":"e-goblin-pay-work","source":"au-goblin-payment","target":"a-goblin"},{"id":"e-goblin-phase-work","source":"au-goblin-phases","target":"a-goblin"},{"id":"e-p-agents-parcel","source":"p-agents","target":"a-parcel"},{"id":"e-parcel-fedex","source":"a-parcel","target":"s-fedex"},{"id":"e-parcel-copper","source":"a-parcel","target":"s-copper"},{"id":"e-parcel-airtable","source":"a-parcel","target":"s-airtable"},{"id":"e-parcel-easypost","source":"a-parcel","target":"s-easypost"},{"id":"e-p-systems-neo","source":"p-systems","target":"s-neo"},{"id":"e-p-systems-claudio","source":"p-systems","target":"s-claudio"},{"id":"e-p-systems-qlc","source":"p-systems","target":"s-qlcplus"},{"id":"e-p-workflows-nano","source":"p-workflows","target":"w-nano-banana"},{"id":"e-p-workflows-parcel-copper","source":"p-workflows","target":"w-parcel-copper"},{"id":"e-p-automations-pickup","source":"p-automations","target":"au-parcel-pickup"},{"id":"e-nano-fal","source":"w-nano-banana","target":"s-fal"},{"id":"e-nano-dash","source":"w-nano-banana","target":"s-dash"},{"id":"e-nano-airtable","source":"w-nano-banana","target":"s-airtable"},{"id":"e-pickup-parcel","source":"au-parcel-pickup","target":"a-parcel"},{"id":"e-copper-parcel","source":"w-parcel-copper","target":"s-copper"},{"id":"e-copper-parcel-agent","source":"w-parcel-copper","target":"a-parcel"},{"id":"e-claudio-neo","source":"s-claudio","target":"s-neo"},{"id":"e-neo-macmini","source":"s-neo","target":"r-boxx"},{"id":"e-p-auto-safety","source":"p-automations","target":"au-pipeline-safety-net"},{"id":"e-p-auto-calc","source":"p-automations","target":"au-component-calculator"},{"id":"e-p-auto-short","source":"p-automations","target":"au-shortage-alert"},{"id":"e-p-data-fstable","source":"p-data","target":"d-flowspace-table"},{"id":"e-safety-flowspace","source":"au-pipeline-safety-net","target":"s-flowspace"},{"id":"e-safety-airtable","source":"au-pipeline-safety-net","target":"s-airtable"},{"id":"e-calc-airtable","source":"au-component-calculator","target":"s-airtable"},{"id":"e-calc-flowspace","source":"au-component-calculator","target":"s-flowspace"},{"id":"e-short-gog","source":"au-shortage-alert","target":"s-gog"},{"id":"e-short-fstable","source":"au-shortage-alert","target":"d-flowspace-table"},{"id":"e-fstable-flowspace","source":"d-flowspace-table","target":"s-flowspace"},{"id":"e-p-systems-legacy","source":"p-systems","target":"s-legacy"},{"id":"e-legacy-neo","source":"s-legacy","target":"s-neo"},{"id":"e-p-knowledge-athena-calcs","source":"p-knowledge","target":"k-athena-calcs"},{"id":"e-athena-calcs","source":"a-athena","target":"k-athena-calcs"},{"id":"e-p-roadmap-ollama","source":"p-roadmap","target":"r-ollama-local"},{"id":"e-ollama-neo","source":"r-ollama-local","target":"s-neo"},{"id":"e-ollama-legacy","source":"r-ollama-local","target":"s-legacy"},{"id":"e-p-auto-email","source":"p-automations","target":"au-email-monitor"},{"id":"e-email-monitor-gog","source":"au-email-monitor","target":"s-gog"},{"id":"e-p-auto-dash-weekly","source":"p-automations","target":"au-dash-weekly"},{"id":"e-dash-weekly-dash","source":"au-dash-weekly","target":"s-dash"},{"id":"e-dash-weekly-airtable","source":"au-dash-weekly","target":"s-airtable"},{"id":"e-goblin-client-reminders","source":"a-goblin","target":"au-goblin-client-reminders"}]};
+
+    function initCytoscape() {
+      // Load data (inline)
+      currentData = INLINE_DATA;
+      allNodes = currentData.nodes;
+      allEdges = currentData.edges;
+
+      const cytoData = allNodes.map(n => ({ data: n }))
+        .concat(allEdges.map(e => ({ data: e })));
+
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: cytoData,
+        style: getCytoscapeStyle(),
+        layout: { name: 'concentric', directed: true },
+        wheelSensitivity: 0.1,
+        pixelRatio: 'auto'
+      });
+
+      // Click handlers
+      cy.on('tap', 'node', (evt) => {
+        const node = evt.target;
+        openDrawer(node.data());
+        highlightConnected(node);
+      });
+
+      cy.on('tap', (evt) => {
+        if (evt.target === cy) {
+          closeDrawer();
+          cy.elements().removeClass('highlighted');
+        }
+      });
+
+      // Apply initial layout
+      applyLayout('radial');
+      cy.fit(cy.elements(), 40);
+
+      // Update HUD count
+      document.getElementById('nodeCount').textContent =
+        'NODES: ' + allNodes.length + '  /  EDGES: ' + allEdges.length;
+
+      // Hover glow effect
+      const tooltip = document.getElementById('nodeTooltip');
+      cy.on('mouseover', 'node', (evt) => {
+        const n = evt.target;
+        n.style({ 'shadow-blur': 35, 'shadow-color': '#00fff0', 'shadow-opacity': 0.9, 'shadow-offset-x': 0, 'shadow-offset-y': 0 });
+        tooltip.textContent = n.data('type').toUpperCase() + ' // ' + n.data('label');
+        tooltip.style.display = 'block';
+      });
+      cy.on('mouseout', 'node', (evt) => {
+        const n = evt.target;
+        // Reset shadow based on type
+        const type = n.data('type');
+        if (type === 'prediction') {
+          n.style({ 'shadow-blur': 25, 'shadow-color': '#00ff96', 'shadow-opacity': 0.6 });
+        } else if (n.data('status') === 'blocked') {
+          n.style({ 'shadow-blur': 15, 'shadow-color': '#ff2244', 'shadow-opacity': 0.5 });
+        } else {
+          n.style({ 'shadow-blur': 0, 'shadow-opacity': 0 });
+        }
+        tooltip.style.display = 'none';
+      });
+      cy.on('mousemove', (evt) => {
+        tooltip.style.left = (evt.originalEvent.clientX + 14) + 'px';
+        tooltip.style.top  = (evt.originalEvent.clientY - 8) + 'px';
+      });
+
+      // ── Next Steps Layer ────────────────────────────────────
+      let nextStepsVisible = false;
+
+      function buildNextStepsLayer() {
+        // Add recommendation nodes + edges for every node that has a nextAction
+        const recElements = [];
+        cy.nodes().forEach(node => {
+          const d = node.data();
+          if (!d.nextAction || d.type === 'recommendation') return;
+          const recId = 'rec-' + d.id;
+          if (cy.getElementById(recId).length > 0) return; // already exists
+          recElements.push({
+            group: 'nodes',
+            data: {
+              id: recId,
+              label: '→ ' + d.nextAction,
+              type: 'recommendation',
+              parentNodeId: d.id
+            }
+          });
+          recElements.push({
+            group: 'edges',
+            data: {
+              id: 'rec-edge-' + d.id,
+              source: d.id,
+              target: recId,
+              type: 'recommendation'
+            }
+          });
+        });
+        if (recElements.length > 0) cy.add(recElements);
+      }
+
+      function positionRecNodes() {
+        cy.nodes('[type="recommendation"]').forEach(rec => {
+          const parentId = rec.data('parentNodeId');
+          const parent = cy.getElementById(parentId);
+          if (!parent || parent.length === 0) return;
+          const pos = parent.position();
+          const h = parent.height() || 60;
+          rec.position({ x: pos.x, y: pos.y + h / 2 + 35 });
+        });
+      }
+
+      function toggleNextSteps() {
+        nextStepsVisible = !nextStepsVisible;
+        const btn = document.getElementById('toggleNextSteps');
+        if (nextStepsVisible) {
+          buildNextStepsLayer();
+          positionRecNodes();
+          cy.elements('[type="recommendation"]').addClass('rec-visible');
+          btn.style.borderColor = 'rgba(255,220,0,0.9)';
+          btn.style.color = '#ffe566';
+          btn.style.background = 'rgba(255,220,0,0.12)';
+          btn.style.boxShadow = '0 0 12px rgba(255,220,0,0.3)';
+        } else {
+          cy.elements('[type="recommendation"]').removeClass('rec-visible');
+          btn.style.borderColor = 'rgba(255,220,0,0.5)';
+          btn.style.color = 'rgba(255,220,0,0.8)';
+          btn.style.background = 'transparent';
+          btn.style.boxShadow = 'none';
+        }
+      }
+
+      document.getElementById('toggleNextSteps').addEventListener('click', toggleNextSteps);
+
+      // ── Update status bar on node click
+      cy.on('tap', 'node', (evt) => {
+        const d = evt.target.data();
+        document.getElementById('sb-selected').textContent =
+          '[' + (d.type||'').toUpperCase() + '] ' + d.label + ' // STATUS: ' + (d.status||'').toUpperCase();
+      });
+    }
+
+    function getCytoscapeStyle() {
+      return [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#1e293b',
+            'border-color': '#64748b',
+            'border-width': 1,
+            'color': '#f1f5f9',
+            'label': 'data(label)',
+            'font-family': 'Share Tech Mono, monospace',
+            'font-size': 11,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': 75,
+            'text-margin-y': -3,
+            'overlay-padding': 5,
+            'opacity': 0.95
+          }
+        },
+        {
+          selector: 'node[type="root"]',
+          style: {
+            'width': 130,
+            'height': 130,
+            'shape': 'ellipse',
+            'background-color': '#020408',
+            'border-color': '#00fff0',
+            'border-width': 2.5,
+            'color': '#00fff0',
+            'font-family': 'Orbitron, sans-serif',
+            'font-size': 12,
+            'font-weight': 'bold',
+            'text-outline-color': '#020408',
+            'text-outline-width': 3,
+            'shadow-blur': 30,
+            'shadow-color': '#00fff0',
+            'shadow-opacity': 0.8,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="pillar"]',
+          style: {
+            'width': 110,
+            'height': 65,
+            'shape': 'roundrectangle',
+            'background-color': 'rgba(0,100,255,0.15)',
+            'border-color': '#0084ff',
+            'border-width': 2,
+            'color': '#60a5fa',
+            'font-family': 'Orbitron, sans-serif',
+            'font-size': 9,
+            'font-weight': 'bold',
+            'text-outline-color': '#020408',
+            'text-outline-width': 2,
+            'shadow-blur': 18,
+            'shadow-color': '#0084ff',
+            'shadow-opacity': 0.5,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="agent"]',
+          style: {
+            'width': 85,
+            'height': 85,
+            'shape': 'ellipse',
+            'background-color': 'rgba(123,47,255,0.18)',
+            'border-color': '#7b2fff',
+            'border-width': 2,
+            'color': '#c4b5fd',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 2,
+            'shadow-blur': 22,
+            'shadow-color': '#7b2fff',
+            'shadow-opacity': 0.65,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="workflow"]',
+          style: {
+            'width': 90,
+            'height': 55,
+            'shape': 'roundrectangle',
+            'background-color': 'rgba(0,210,255,0.12)',
+            'border-color': '#00d2ff',
+            'border-width': 1.5,
+            'color': '#7dd3fc',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 12,
+            'shadow-color': '#00d2ff',
+            'shadow-opacity': 0.4,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="automation"]',
+          style: {
+            'width': 80,
+            'height': 80,
+            'shape': 'diamond',
+            'background-color': 'rgba(255,140,0,0.15)',
+            'border-color': '#ff8c00',
+            'border-width': 2,
+            'color': '#fdba74',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 18,
+            'shadow-color': '#ff8c00',
+            'shadow-opacity': 0.5,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="system"]',
+          style: {
+            'width': 85,
+            'height': 50,
+            'shape': 'rectangle',
+            'background-color': 'rgba(0,255,150,0.10)',
+            'border-color': '#00ff96',
+            'border-width': 1.5,
+            'color': '#6ee7b7',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 10,
+            'shadow-color': '#00ff96',
+            'shadow-opacity': 0.35,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="knowledge"]',
+          style: {
+            'width': 80,
+            'height': 50,
+            'shape': 'roundrectangle',
+            'background-color': 'rgba(255,215,0,0.12)',
+            'border-color': '#ffd700',
+            'border-width': 1.5,
+            'color': '#fde68a',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 12,
+            'shadow-color': '#ffd700',
+            'shadow-opacity': 0.4,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="roadmap"]',
+          style: {
+            'width': 90,
+            'height': 80,
+            'shape': 'hexagon',
+            'background-color': 'rgba(200,50,255,0.15)',
+            'border-color': '#c832ff',
+            'border-width': 2,
+            'color': '#e879f9',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 18,
+            'shadow-color': '#c832ff',
+            'shadow-opacity': 0.5,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="data"]',
+          style: {
+            'width': 85,
+            'height': 50,
+            'shape': 'rectangle',
+            'background-color': 'rgba(0,240,255,0.10)',
+            'border-color': '#00e5ff',
+            'border-width': 1.5,
+            'color': '#67e8f9',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 10,
+            'shadow-color': '#00e5ff',
+            'shadow-opacity': 0.35,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="workstream"]',
+          style: {
+            'width': 90,
+            'height': 55,
+            'shape': 'roundrectangle',
+            'background-color': 'rgba(255,50,150,0.15)',
+            'border-color': '#ff3296',
+            'border-width': 1.5,
+            'color': '#f9a8d4',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 1.5,
+            'shadow-blur': 14,
+            'shadow-color': '#ff3296',
+            'shadow-opacity': 0.45,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[type="prediction"]',
+          style: {
+            'width': 85,
+            'height': 55,
+            'shape': 'ellipse',
+            'background-color': 'rgba(0,255,150,0.12)',
+            'border-color': '#00ff96',
+            'border-width': 2,
+            'color': '#6ee7b7',
+            'font-size': 10,
+            'text-outline-color': '#020408',
+            'text-outline-width': 2,
+            'shadow-blur': 30,
+            'shadow-color': '#00ff96',
+            'shadow-opacity': 0.75,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node[status="in-progress"]',
+          style: {
+            'border-width': 3,
+            'border-color': (ele) => {
+              const type = ele.data('type');
+              const baseColor = getTypeColor(type).border;
+              return baseColor;
+            }
+          }
+        },
+        {
+          selector: 'node[status="blocked"]',
+          style: {
+            'border-color': '#ff2244',
+            'border-width': 2,
+            'border-style': 'dashed',
+            'shadow-blur': 15,
+            'shadow-color': '#ff2244',
+            'shadow-opacity': 0.5,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0
+          }
+        },
+        {
+          selector: 'node.highlighted',
+          style: {
+            'shadow-blur': 30,
+            'shadow-color': '#00fff0',
+            'shadow-opacity': 0.9,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0,
+            'z-index': 10,
+            'opacity': 1
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 1,
+            'line-color': 'rgba(0,255,240,0.12)',
+            'target-arrow-color': 'rgba(0,255,240,0.12)',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier',
+            'opacity': 0.5
+          }
+        },
+        {
+          selector: 'edge.highlighted',
+          style: {
+            'line-color': '#00fff0',
+            'target-arrow-color': '#00fff0',
+            'opacity': 0.9,
+            'width': 2.5,
+            'z-index': 10
+          }
+        },
+        {
+          selector: 'node.hidden',
+          style: {
+            'display': 'none'
+          }
+        },
+        {
+          selector: 'edge.hidden',
+          style: {
+            'display': 'none'
+          }
+        },
+        {
+          selector: 'node[type="recommendation"]',
+          style: {
+            'display': 'none',
+            'width': 130,
+            'height': 40,
+            'shape': 'roundrectangle',
+            'background-color': 'rgba(255,220,0,0.10)',
+            'border-color': 'rgba(255,220,0,0.7)',
+            'border-width': 1.5,
+            'border-style': 'dashed',
+            'color': '#ffe566',
+            'font-family': 'Share Tech Mono, monospace',
+            'font-size': 9,
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': 120,
+            'label': 'data(label)',
+            'text-outline-color': '#020408',
+            'text-outline-width': 2,
+            'shadow-blur': 12,
+            'shadow-color': 'rgba(255,220,0,0.5)',
+            'shadow-opacity': 0.7,
+            'shadow-offset-x': 0,
+            'shadow-offset-y': 0,
+            'opacity': 0.95
+          }
+        },
+        {
+          selector: 'node[type="recommendation"].rec-visible',
+          style: { 'display': 'element' }
+        },
+        {
+          selector: 'edge[type="recommendation"]',
+          style: {
+            'display': 'none',
+            'width': 1,
+            'line-color': 'rgba(255,220,0,0.3)',
+            'line-style': 'dashed',
+            'line-dash-pattern': [4, 3],
+            'target-arrow-shape': 'none',
+            'curve-style': 'straight',
+            'opacity': 0.5
+          }
+        },
+        {
+          selector: 'edge[type="recommendation"].rec-visible',
+          style: { 'display': 'element' }
+        }
+      ];
+    }
+
+    function getTypeColor(type) {
+      const colors = {
+        root: { bg: '#020408', border: '#00fff0' },
+        pillar: { bg: 'rgba(0,100,255,0.12)', border: '#0084ff' },
+        agent: { bg: 'rgba(123,47,255,0.15)', border: '#7b2fff' },
+        workflow: { bg: 'rgba(0,210,255,0.10)', border: '#00d2ff' },
+        automation: { bg: 'rgba(255,140,0,0.12)', border: '#ff8c00' },
+        system: { bg: 'rgba(0,255,150,0.08)', border: '#00ff96' },
+        knowledge: { bg: 'rgba(255,215,0,0.10)', border: '#ffd700' },
+        roadmap: { bg: 'rgba(200,50,255,0.12)', border: '#c832ff' },
+        data: { bg: 'rgba(0,240,255,0.08)', border: '#00e5ff' },
+        workstream: { bg: 'rgba(255,50,150,0.12)', border: '#ff3296' },
+        prediction: { bg: 'rgba(0,255,150,0.10)', border: '#00ff96' }
+      };
+      return colors[type] || colors.root;
+    }
+
+    function applyLayout(name) {
+      let options = { directed: true, animate: true, animationDuration: 500 };
+
+      switch(name) {
+        case 'radial':
+          cy.layout({ name: 'concentric', directed: true, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'tree':
+          cy.layout({ name: 'dagre', rankDir: 'TB', nodeSep: 60, rankSep: 80, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'columns':
+          cy.layout({ name: 'breadthfirst', directed: true, grid: true, spacingFactor: 1.4, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'workflow':
+          cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, animationDuration: 500 }).run();
+          break;
+        case 'force':
+          cy.layout({ name: 'cose', animate: true, nodeRepulsion: 8000, idealEdgeLength: 120, animationDuration: 500 }).run();
+          break;
+      }
+    }
+
+    function highlightConnected(node) {
+      cy.elements().removeClass('highlighted');
+      node.addClass('highlighted');
+      node.connectedEdges().addClass('highlighted');
+      node.connectedEdges().target().addClass('highlighted');
+      node.connectedEdges().source().addClass('highlighted');
+    }
+
+    function openDrawer(nodeData) {
+      const drawer = document.getElementById('drawer');
+      const title = document.getElementById('drawerTitle');
+      const content = document.getElementById('drawerContent');
+
+      title.textContent = nodeData.label;
+
+      let html = '<div class="drawer-section">';
+      
+      if (nodeData.status) {
+        html += `<div class="badge status-${nodeData.status}">${nodeData.status}</div>`;
+      }
+      if (nodeData.priority) {
+        html += `<div class="badge priority-${nodeData.priority}">${nodeData.priority}</div>`;
+      }
+
+      html += '</div>';
+
+      if (nodeData.description) {
+        html += `<div class="drawer-section"><div class="description">${escapeHtml(nodeData.description)}</div></div>`;
+      }
+
+      if (nodeData.nextAction) {
+        html += `<div class="drawer-section"><div class="next-action"><div class="next-action-label">Next Action</div>${escapeHtml(nodeData.nextAction)}</div></div>`;
+      }
+
+      const detailsFields = [
+        { key: 'type', label: 'Type' },
+        { key: 'pillar', label: 'Pillar' },
+        { key: 'status', label: 'Status' },
+        { key: 'priority', label: 'Priority' },
+        { key: 'channel', label: 'Channel' },
+        { key: 'file', label: 'File' },
+        { key: 'owner', label: 'Owner' },
+        { key: 'notes', label: 'Notes' }
+      ];
+
+      let hasDetails = false;
+      let detailsHtml = '<table class="details-table">';
+
+      detailsFields.forEach(field => {
+        if (nodeData[field.key] && nodeData[field.key] !== nodeData.status && nodeData[field.key] !== nodeData.priority) {
+          detailsHtml += `<tr><td>${field.label}</td><td>${escapeHtml(String(nodeData[field.key]))}</td></tr>`;
+          hasDetails = true;
+        }
+      });
+
+      detailsHtml += '</table>';
+
+      if (hasDetails) {
+        html += `<div class="drawer-section"><div class="drawer-section-title">Details</div>${detailsHtml}</div>`;
+      }
+
+      content.innerHTML = html;
+      drawer.classList.add('open');
+    }
+
+    function closeDrawer() {
+      const drawer = document.getElementById('drawer');
+      drawer.classList.remove('open');
+      cy.elements().removeClass('highlighted');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Event listeners
+    document.getElementById('layoutSelect').addEventListener('change', (e) => {
+      applyLayout(e.target.value);
+    });
+
+    document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      applyFilters(query, 
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterPillar').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterStatus').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    document.getElementById('filterPriority').addEventListener('change', () => {
+      applyFilters(
+        document.getElementById('searchInput').value.toLowerCase(),
+        document.getElementById('filterPillar').value,
+        document.getElementById('filterStatus').value,
+        document.getElementById('filterPriority').value);
+    });
+
+    function applyFilters(searchQuery, pillarFilter, statusFilter, priorityFilter) {
+      cy.elements().removeClass('hidden');
+
+      cy.nodes().forEach(node => {
+        const data = node.data();
+        let hidden = false;
+
+        if (searchQuery && !data.label.toLowerCase().includes(searchQuery) && 
+            (!data.description || !data.description.toLowerCase().includes(searchQuery))) {
+          hidden = true;
+        }
+
+        if (pillarFilter && data.pillar !== pillarFilter) {
+          hidden = true;
+        }
+
+        if (statusFilter && data.status !== statusFilter) {
+          hidden = true;
+        }
+
+        if (priorityFilter && data.priority !== priorityFilter) {
+          hidden = true;
+        }
+
+        if (hidden) {
+          node.addClass('hidden');
+        }
+      });
+
+      cy.edges().forEach(edge => {
+        const source = cy.$id(edge.data('source'));
+        const target = cy.$id(edge.data('target'));
+        if (source.hasClass('hidden') || target.hasClass('hidden')) {
+          edge.addClass('hidden');
+        }
+      });
+    }
+
+    document.getElementById('exportJson').addEventListener('click', () => {
+      const dataStr = JSON.stringify(currentData, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'command-map.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('exportMarkdown').addEventListener('click', () => {
+      let md = '# MR Walls Command Map\n\n';
+
+      const pillars = ['p-agents', 'p-workflows', 'p-automations', 'p-systems', 'p-knowledge', 'p-roadmap', 'p-data', 'p-samantha', 'p-predictions'];
+      const pillarNames = {
+        'p-agents': 'AI Agents',
+        'p-workflows': 'Workflows',
+        'p-automations': 'Automations',
+        'p-systems': 'Internal Systems',
+        'p-knowledge': 'Knowledge Base',
+        'p-roadmap': 'Project Roadmap',
+        'p-data': 'Data Infrastructure',
+        'p-samantha': 'Samantha\'s Workstream',
+        'p-predictions': 'Agentic Predictions'
+      };
+
+      pillars.forEach(pillar => {
+        const nodes = allNodes.filter(n => n.pillar === pillar);
+        if (nodes.length > 0) {
+          md += `## ${pillarNames[pillar]}\n\n`;
+          nodes.forEach(node => {
+            if (node.type !== 'pillar') {
+              md += `### ${node.label}\n`;
+              if (node.description) md += `${node.description}\n\n`;
+              if (node.status) md += `**Status:** ${node.status}\n`;
+              if (node.priority) md += `**Priority:** ${node.priority}\n`;
+              if (node.nextAction) md += `**Next Action:** ${node.nextAction}\n`;
+              md += '\n';
+            }
+          });
+        }
+      });
+
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'command-map.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Initialize on load
+    // Legend toggle
+    document.getElementById('legend-title').addEventListener('click', () => {
+      const legend = document.getElementById('legend');
+      const toggle = document.getElementById('legend-toggle');
+      legend.classList.toggle('collapsed');
+      toggle.textContent = legend.classList.contains('collapsed') ? '▶' : '▼';
+    });
+
+    window.addEventListener('load', () => {
+      // Wait for web fonts before drawing so canvas picks them up
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(initCytoscape);
+      } else {
+        initCytoscape();
+      }
+    });
+  </script>
+</body>
+</html>
